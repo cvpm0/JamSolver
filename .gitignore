@@ -1,0 +1,11 @@
+# Compiled binaries
+equity_engine/a.out
+equity_engine/equity_engine
+a.out
+
+# Build directories
+build/
+cmake-build-*/
+
+# gprof output
+gmon.out
