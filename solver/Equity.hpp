@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
-#include "../equity_engine/Engine.hpp"
+#include "../equity-engine/Engine.hpp"
 
 // loaded equity tables — globals, populated by load_equity()
 inline std::vector<uint16_t> equity_2way;

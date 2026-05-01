@@ -1,7 +1,7 @@
 # Compiled binaries
 equity_engine/a.out
 equity_engine/equity_engine
-a.out
+solver/a.out
 
 # Data
 data/equity_2way.bin

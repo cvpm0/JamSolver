@@ -2,17 +2,25 @@
 
 #include "Equity.hpp"
 #include <algorithm>
+#include <cstdint>
+
+// Compile with OpenMP for parallel cache fills:
+//   g++ -O3 -fopenmp ...
+// If OpenMP is unavailable the #pragma lines are silently ignored and the
+// solver still works correctly, just sequentially.
 
 constexpr int    NUM_STATES     = 14;
 constexpr int    NUM_HANDS      = 169;
-constexpr int    NUM_ITERATIONS = 5'000;
+constexpr int    NUM_ITERATIONS = 50'000;
 constexpr double STACK          = 8.0;
 constexpr double SB_BLIND       = 0.5;
 constexpr double BB_BLIND       = 1.0;
 
 // 4-way pots are approximated as 3-way pots scaled by this factor.
-// Adding a 4th tight opponent reduces hero's win probability — 0.85 is a
-// reasonable starting point; tune against ground-truth 4-way equity if needed.
+// Adding a 4th tight opponent reduces hero's win probability. When all three
+// villains jam (rare), ranges are tight (~5-10% each) and equities cluster
+// more — 0.80 is more accurate than 0.85 in this regime. Tune empirically
+// against ground-truth 4-way equity if needed.
 constexpr double FOUR_WAY_FACTOR = 0.80;
 
 enum State : uint8_t {
@@ -94,64 +102,87 @@ double p_jam(State s) {
     return (total > 1e-9) ? jam / total : 0.0;
 }
 
-// ── eq_vs_one: fill for all states (cheap: ~28k ops per state) ──────────────
+// ── eq_vs_one: fill for all states ──────────────────────────────────────────
+// Parallelized across states (independent writes to eq_vs_one[s][...]).
+// Inner villain loop iterates only nonzero-weight hands — after convergence
+// most states have a small jam range (~5-30 hands), so this is a big win.
 void fill_eq_vs_one() {
+    #pragma omp parallel for schedule(dynamic)
     for (int s = 0; s < NUM_STATES; ++s) {
-        // Precompute villain weights once per state (skip zeros in inner loop)
         double w_v[NUM_HANDS];
+        int    nz_idx[NUM_HANDS];
+        int    nz_count = 0;
         double denom = 0.0;
+
         for (int v = 0; v < NUM_HANDS; ++v) {
-            w_v[v] = combo_weight(v) * strategy[s][v];
-            denom += w_v[v];
+            double w = combo_weight(v) * strategy[s][v];
+            w_v[v] = w;
+            if (w > 0.0) {
+                nz_idx[nz_count++] = v;
+                denom += w;
+            }
         }
         if (denom < 1e-9) {
             for (int h = 0; h < NUM_HANDS; ++h) eq_vs_one[s][h] = 0.5;
             continue;
         }
+        double inv_denom = 1.0 / denom;
         for (int h = 0; h < NUM_HANDS; ++h) {
             double num = 0.0;
-            for (int v = 0; v < NUM_HANDS; ++v) {
-                if (w_v[v] <= 0.0) continue;
+            for (int i = 0; i < nz_count; ++i) {
+                int v = nz_idx[i];
                 num += w_v[v] * get_equity_2way(h, v, 0);
             }
-            eq_vs_one[s][h] = num / denom;
+            eq_vs_one[s][h] = num * inv_denom;
         }
     }
 }
 
 // Helper: fill eq_vs_two[vs1][vs2] for one specific pair.
-// Cost per pair: 169^3 = ~4.8M equity lookups (only if both ranges are non-empty).
+// After building villain weights, we compact to lists of nonzero indices.
+// At convergence, ranges are sparse (~5-30 hands), so iterating compacted
+// lists is dramatically faster than skipping zeros inline (30-100x speedup
+// in late iterations).
 static void fill_eq_vs_two_pair(State vs1, State vs2) {
     double w1[NUM_HANDS], w2[NUM_HANDS];
+    int    idx1[NUM_HANDS], idx2[NUM_HANDS];
+    int    n1 = 0, n2 = 0;
     double sum1 = 0.0, sum2 = 0.0;
+
     for (int v = 0; v < NUM_HANDS; ++v) {
-        w1[v] = combo_weight(v) * strategy[vs1][v]; sum1 += w1[v];
-        w2[v] = combo_weight(v) * strategy[vs2][v]; sum2 += w2[v];
+        double a = combo_weight(v) * strategy[vs1][v];
+        double b = combo_weight(v) * strategy[vs2][v];
+        w1[v] = a; w2[v] = b;
+        if (a > 0.0) { idx1[n1++] = v; sum1 += a; }
+        if (b > 0.0) { idx2[n2++] = v; sum2 += b; }
     }
     double denom = sum1 * sum2;
     if (denom < 1e-9) {
         for (int h = 0; h < NUM_HANDS; ++h) eq_vs_two[vs1][vs2][h] = 1.0/3.0;
         return;
     }
+    double inv_denom = 1.0 / denom;
 
     for (int h = 0; h < NUM_HANDS; ++h) {
         double num = 0.0;
-        for (int v1 = 0; v1 < NUM_HANDS; ++v1) {
-            if (w1[v1] <= 0.0) continue;
-            for (int v2 = 0; v2 < NUM_HANDS; ++v2) {
-                if (w2[v2] <= 0.0) continue;
-                num += w1[v1] * w2[v2] * get_equity_3way(h, v1, v2, 0);
+        for (int i = 0; i < n1; ++i) {
+            int    v1 = idx1[i];
+            double wa = w1[v1];
+            for (int j = 0; j < n2; ++j) {
+                int v2 = idx2[j];
+                num += wa * w2[v2] * get_equity_3way(h, v1, v2, 0);
             }
         }
-        eq_vs_two[vs1][vs2][h] = num / denom;
+        eq_vs_two[vs1][vs2][h] = num * inv_denom;
     }
 }
 
 // ── eq_vs_two: only fill the (vs1, vs2) pairs that EV functions actually use.
-// 11 unique pairs × ~4.8M ops each ≈ 53M ops per iteration. The bulk of cost.
+// Parallelized across pairs — each pair writes to a disjoint slice of
+// eq_vs_two[][][], so no synchronization needed.
 void fill_eq_vs_two() {
     // Pairs referenced by ev_jam_* functions (including 4-way approximations)
-    constexpr int PAIRS[][2] = {
+    static constexpr int PAIRS[][2] = {
         {BTN_F,  SB_FJ},     // BB_FJJ; BTN_F SB-call/BB-call
         {UTG,    SB_JF},     // BB_JFJ; UTG BTN-fold/SB-call/BB-call
         {UTG,    BTN_J},     // BB_JJF; 4-way approx for BB_JJJ and SB_JJ all-call
@@ -164,8 +195,12 @@ void fill_eq_vs_two() {
         {SB_JF,  BB_JFJ},    // UTG BTN-fold/SB-call/BB-call
         {UTG,    SB_JJ},     // 4-way approx for BTN_J all-call
     };
-    for (auto& [a, b] : PAIRS) {
-        fill_eq_vs_two_pair(static_cast<State>(a), static_cast<State>(b));
+    constexpr int N_PAIRS = sizeof(PAIRS) / sizeof(PAIRS[0]);
+
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < N_PAIRS; ++i) {
+        fill_eq_vs_two_pair(static_cast<State>(PAIRS[i][0]),
+                            static_cast<State>(PAIRS[i][1]));
     }
 }
 
@@ -406,7 +441,10 @@ void run_cfr() {
 }
 
 void compute_avg_strategy(double out[NUM_STATES][NUM_HANDS]) {
-    double total_weight = (NUM_ITERATIONS * (NUM_ITERATIONS + 1)) / 2.0;
+    // Triangular number: 1 + 2 + ... + NUM_ITERATIONS.
+    // Promote to int64 — at NUM_ITERATIONS = 100k this overflows int32.
+    int64_t n = static_cast<int64_t>(NUM_ITERATIONS);
+    double total_weight = static_cast<double>(n * (n + 1)) / 2.0;
     for (int s = 0; s < NUM_STATES; ++s)
         for (int h = 0; h < NUM_HANDS; ++h)
             out[s][h] = (total_weight > 0.0) ? strategy_sum[s][h] / total_weight : 0.0;

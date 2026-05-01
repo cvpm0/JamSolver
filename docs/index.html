@@ -210,7 +210,79 @@
   .act-btn.selected.jam   { border-color: var(--jam);  color: var(--jam);  background: rgba(217, 119, 87, 0.08); }
   .act-btn.selected.fold  { border-color: var(--fold); color: var(--fold); background: rgba(106, 139, 124, 0.08); }
 
-  /* ───────── hand grid ───────── */
+  /* ───────── rank picker ───────── */
+  .rank-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .rank-btn {
+    aspect-ratio: 1;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-2);
+    font-family: var(--serif);
+    font-size: 1.6rem;
+    font-weight: 400;
+    color: var(--ink);
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .rank-btn:active {
+    transform: scale(0.92);
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .rank-btn.disabled {
+    opacity: 0.25;
+    pointer-events: none;
+  }
+  .rank-btn.selected {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(217, 119, 87, 0.08);
+  }
+
+  /* ───────── suit picker ───────── */
+  .suit-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .suit-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.4rem 1.6rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-2);
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .suit-btn:active {
+    transform: scale(0.98);
+    border-color: var(--accent);
+  }
+  .suit-label {
+    font-family: var(--serif);
+    font-size: 1.8rem;
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .suit-cards {
+    display: flex;
+    gap: 0.4rem;
+    font-size: 2rem;
+    line-height: 1;
+  }
+  .suit-cards .card.heart { color: var(--jam); }
+  .suit-cards .card.spade { color: var(--ink-mute); }
+
+  /* ───────── hand grid (chart view only) ───────── */
   .hand-grid {
     display: grid;
     grid-template-columns: repeat(13, 1fr);
@@ -428,8 +500,8 @@
 
 <div class="stepper" id="stepper">
   <div class="step active" data-step="position">Position</div>
-  <div class="step" data-step="action">Action</div>
   <div class="step" data-step="hand">Hand</div>
+  <div class="step" data-step="action">Action</div>
   <div class="step" data-step="result">Verdict</div>
 </div>
 
@@ -468,11 +540,34 @@
     <div class="actions" id="actions"></div>
   </section>
 
-  <!-- HAND -->
-  <section class="screen" id="screen-hand">
-    <h1 class="prompt">What's your <em>hand</em>?</h1>
-    <p class="sub">Diagonal = pairs · upper = suited · lower = offsuit</p>
-    <div class="hand-grid" id="hand-grid"></div>
+  <!-- HAND: rank 1 -->
+  <section class="screen" id="screen-hand1">
+    <h1 class="prompt">Your <em>high</em> card?</h1>
+    <p class="sub">If it's a pair, just tap that rank — we'll skip the rest.</p>
+    <div class="rank-grid" id="rank-grid-1"></div>
+  </section>
+
+  <!-- HAND: rank 2 -->
+  <section class="screen" id="screen-hand2">
+    <h1 class="prompt">Your <em>low</em> card?</h1>
+    <p class="sub" id="hand2-sub">Pick the second rank, or tap the same rank for a pair.</p>
+    <div class="rank-grid" id="rank-grid-2"></div>
+  </section>
+
+  <!-- HAND: suit -->
+  <section class="screen" id="screen-hand3">
+    <h1 class="prompt"><em>Suited</em> or off?</h1>
+    <p class="sub" id="hand3-sub">—</p>
+    <div class="suit-choice">
+      <button class="suit-btn" data-suit="s">
+        <span class="suit-label">Suited</span>
+        <span class="suit-cards"><span class="card heart">♥</span><span class="card heart">♥</span></span>
+      </button>
+      <button class="suit-btn" data-suit="o">
+        <span class="suit-label">Offsuit</span>
+        <span class="suit-cards"><span class="card heart">♥</span><span class="card spade">♠</span></span>
+      </button>
+    </div>
   </section>
 
   <!-- RESULT -->
@@ -613,16 +708,38 @@ function handLabel(row, col) {
 const game = {
   position: null,        // 'UTG' | 'BTN' | 'SB' | 'BB'
   history:  [],          // array of 'J' | 'F' for each prior player
-  handRow:  null,
-  handCol:  null,
+  handHigh: null,        // 0..12 (rank index, 0=A)
+  handLow:  null,        // 0..12 (rank index, 0=A)
+  handSuit: null,        // 's' | 'o' (null when pair)
   prob:     null,
   rolled:   null,        // 'JAM' or 'FOLD'
 };
 
+// derived: get (row, col) for the strategy lookup
+function handRowCol() {
+  // Convention from the original grid: row = high (smaller index), col = low (larger index)
+  // Pair: row==col. Suited: row<col (upper triangle). Offsuit: row>col (lower triangle).
+  if (game.handHigh === null || game.handLow === null) return null;
+  if (game.handHigh === game.handLow) return [game.handHigh, game.handHigh]; // pair
+  // Note: handHigh is the higher-ranked card, so it has the SMALLER rank index
+  // (since A=0, K=1, ...). So handHigh < handLow in index space.
+  if (game.handSuit === 's') return [game.handHigh, game.handLow];  // upper = suited
+  else                       return [game.handLow,  game.handHigh]; // lower = offsuit
+}
+
 // ─────────────────────────────────────────────────────────────
 //  SCREEN ROUTING
 // ─────────────────────────────────────────────────────────────
-const SCREEN_ORDER = ['position', 'action', 'hand', 'result'];
+//  The stepper has 4 phases: position, hand, action, result.
+//  The "hand" phase has 3 sub-screens: hand1 (high rank), hand2 (low rank),
+//  hand3 (suited/off).  All map to the same stepper dot.
+const SCREEN_ORDER  = ['position', 'hand1', 'hand2', 'hand3', 'action', 'result'];
+const STEPPER_PHASE = {
+  position: 0,
+  hand1: 1, hand2: 1, hand3: 1,
+  action: 2,
+  result: 3,
+};
 
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -630,17 +747,18 @@ function showScreen(name) {
   if (el) el.classList.add('active');
 
   // stepper
-  const idx = SCREEN_ORDER.indexOf(name);
+  const phase = STEPPER_PHASE[name];
   document.querySelectorAll('.step').forEach((s, i) => {
     s.classList.remove('active', 'done');
-    if (i === idx) s.classList.add('active');
-    else if (i < idx) s.classList.add('done');
+    if (phase === undefined) return;
+    if (i === phase) s.classList.add('active');
+    else if (i < phase) s.classList.add('done');
   });
   document.getElementById('stepper').style.visibility =
-    SCREEN_ORDER.includes(name) ? 'visible' : 'hidden';
+    (phase !== undefined) ? 'visible' : 'hidden';
 
   // back/restart visibility
-  const showNav = ['action', 'hand', 'result'].includes(name);
+  const showNav = ['hand1', 'hand2', 'hand3', 'action', 'result'].includes(name);
   document.getElementById('nav').style.display = showNav ? 'flex' : 'none';
   document.getElementById('back-btn').style.display    = (name === 'result') ? 'none' : 'inline-block';
   document.getElementById('restart-btn').style.display = (name === 'result') ? 'inline-block' : 'none';
@@ -653,13 +771,10 @@ document.querySelectorAll('.pos-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     game.position = btn.dataset.pos;
     game.history = [];
-    if (PRIOR_PLAYERS[game.position].length === 0) {
-      // UTG: skip action screen
-      goToHand();
-    } else {
-      buildActionScreen();
-      showScreen('action');
-    }
+    game.handHigh = null;
+    game.handLow  = null;
+    game.handSuit = null;   // 's' | 'o' | null (null when pair)
+    goToHand1();
   });
 });
 
@@ -713,10 +828,10 @@ function buildActionScreen() {
         game.history.push(b.dataset.action);
         // rebuild (next row will appear if needed)
         buildActionScreen();
-        // if we have all needed actions, advance
+        // if we have all needed actions, advance to the result
         if (game.history.length === players.length) {
           // small delay so user sees their selection
-          setTimeout(goToHand, 220);
+          setTimeout(computeAndShowResult, 220);
         }
       });
     });
@@ -729,38 +844,109 @@ function buildActionScreen() {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  HAND SCREEN
+//  HAND PICKER (3 sub-screens)
 // ─────────────────────────────────────────────────────────────
-function buildHandGrid(containerId, opts = {}) {
+function goToHand1() {
+  buildRankPicker('rank-grid-1', { disableAbove: null, onPick: r => {
+    game.handHigh = r;
+    game.handLow  = null;
+    game.handSuit = null;
+    goToHand2();
+  }});
+  showScreen('hand1');
+}
+
+function goToHand2() {
+  // can only pick a low rank that is the SAME or LOWER than the high rank.
+  // In our index space (A=0, K=1, ..., 2=12), lower rank = larger index.
+  // So we disable indices STRICTLY LESS than game.handHigh.
+  buildRankPicker('rank-grid-2', { disableAbove: game.handHigh, onPick: r => {
+    game.handLow = r;
+    if (r === game.handHigh) {
+      // pair → no suit step, go straight to action history
+      game.handSuit = null;
+      goToActionOrResult();
+    } else {
+      goToHand3();
+    }
+  }, highlightHigh: game.handHigh });
+  // dynamic subtext
+  const hi = RANKS[game.handHigh];
+  document.getElementById('hand2-sub').textContent =
+    `High card is ${hi}. Pick the low card, or tap ${hi} again for a pair.`;
+  showScreen('hand2');
+}
+
+function goToHand3() {
+  const hi = RANKS[game.handHigh];
+  const lo = RANKS[game.handLow];
+  document.getElementById('hand3-sub').textContent = `Your hand: ${hi}${lo}`;
+  showScreen('hand3');
+}
+
+document.querySelectorAll('.suit-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    game.handSuit = btn.dataset.suit;  // 's' or 'o'
+    goToActionOrResult();
+  });
+});
+
+function goToActionOrResult() {
+  if (PRIOR_PLAYERS[game.position].length === 0) {
+    // UTG: no action history, jump straight to result
+    computeAndShowResult();
+  } else {
+    buildActionScreen();
+    showScreen('action');
+  }
+}
+
+function buildRankPicker(containerId, opts) {
   const grid = document.getElementById(containerId);
   grid.innerHTML = '';
   for (let r = 0; r < 13; r++) {
+    const btn = document.createElement('button');
+    btn.className = 'rank-btn';
+    btn.textContent = RANKS[r];
+    btn.dataset.rank = r;
+    if (opts.disableAbove !== null && r < opts.disableAbove) {
+      btn.classList.add('disabled');
+    }
+    if (opts.highlightHigh === r) {
+      // make pair-of-this-rank visually obvious: glowing accent
+      btn.classList.add('selected');
+    }
+    btn.addEventListener('click', () => opts.onPick(r));
+    grid.appendChild(btn);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  HAND GRID (chart view only — read-only heatmap)
+// ─────────────────────────────────────────────────────────────
+function buildChartGrid() {
+  const grid = document.getElementById('chart-grid');
+  grid.innerHTML = '';
+  const rc = handRowCol();
+  const heroR = rc ? rc[0] : -1;
+  const heroC = rc ? rc[1] : -1;
+
+  const stateKey = game.position + '|' + game.history.join('');
+  const stateIdx = STATE_INDEX[stateKey];
+
+  for (let r = 0; r < 13; r++) {
     for (let c = 0; c < 13; c++) {
-      const cell = document.createElement('button');
+      const cell = document.createElement('div');
       cell.className = 'cell';
       if (r === c) cell.classList.add('pair');
-      else if (r < c) cell.classList.add('suited');   // upper-right
-      else cell.classList.add('offsuit');             // lower-left
+      else if (r < c) cell.classList.add('suited');
+      else cell.classList.add('offsuit');
       cell.textContent = handLabel(r, c);
-      cell.dataset.row = r;
-      cell.dataset.col = c;
-
-      if (opts.colorByProb && game.position) {
-        // chart view: color by P(jam) for this state
-        const stateKey = game.position + '|' + game.history.join('');
-        const stateIdx = STATE_INDEX[stateKey];
-        if (stateIdx !== undefined) {
-          const p = pJam(stateIdx, handIndex(r, c));
-          cell.style.background = probColor(p);
-          if (game.handRow === r && game.handCol === c) cell.classList.add('hero');
-        }
-      } else {
-        cell.addEventListener('click', () => {
-          game.handRow = r;
-          game.handCol = c;
-          computeAndShowResult();
-        });
+      if (stateIdx !== undefined) {
+        const p = pJam(stateIdx, handIndex(r, c));
+        cell.style.background = probColor(p);
       }
+      if (r === heroR && c === heroC) cell.classList.add('hero');
       grid.appendChild(cell);
     }
   }
@@ -788,8 +974,8 @@ function mix(a, b, t) {
 }
 
 function goToHand() {
-  buildHandGrid('hand-grid');
-  showScreen('hand');
+  // legacy helper retained for any back-nav fallthrough; routes to the first hand step
+  goToHand1();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -803,13 +989,19 @@ function computeAndShowResult() {
     showScreen('error');
     return;
   }
-  const hIdx = handIndex(game.handRow, game.handCol);
+  const rc = handRowCol();
+  if (!rc) {
+    document.getElementById('error-detail').textContent = 'Hand not fully specified';
+    showScreen('error');
+    return;
+  }
+  const hIdx = handIndex(rc[0], rc[1]);
   game.prob = pJam(stateIdx, hIdx);
 
   rollDice();
 
   // populate result UI
-  const handStr = handLabel(game.handRow, game.handCol);
+  const handStr = handLabel(rc[0], rc[1]);
   const histStr = game.history.length
     ? PRIOR_PLAYERS[game.position]
         .map((p, i) => p + (game.history[i] === 'J' ? (game.history.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
@@ -818,7 +1010,7 @@ function computeAndShowResult() {
   document.getElementById('context-line').innerHTML =
     game.position + ' · ' + histStr + ' · <span class="hand">' + handStr + '</span>';
 
-  buildHandGrid('chart-grid', { colorByProb: true });
+  buildChartGrid();
   document.getElementById('chart-view').classList.remove('show');
   document.getElementById('chart-toggle').textContent = 'View full chart';
   showScreen('result');
@@ -849,20 +1041,30 @@ function rollDice() {
 //  NAV
 // ─────────────────────────────────────────────────────────────
 document.getElementById('back-btn').addEventListener('click', () => {
-  // simple linear back
-  const screens = ['position', 'action', 'hand'];
   const cur = document.querySelector('.screen.active').id.replace('screen-', '');
-  const i = screens.indexOf(cur);
-  if (i <= 0) return;
-  if (cur === 'hand' && PRIOR_PLAYERS[game.position].length === 0) {
-    showScreen('position');
-  } else {
-    showScreen(screens[i - 1]);
+  switch (cur) {
+    case 'hand1':
+      showScreen('position');
+      break;
+    case 'hand2':
+      goToHand1();  // rebuild rank picker 1 (re-enables all ranks visually)
+      break;
+    case 'hand3':
+      goToHand2();
+      break;
+    case 'action':
+      // back into the hand picker; if it was a pair, jump to hand2 (skip the suit step)
+      if (game.handHigh === game.handLow) goToHand2();
+      else                                 goToHand3();
+      break;
+    default:
+      showScreen('position');
   }
 });
 
 document.getElementById('restart-btn').addEventListener('click', () => {
-  game.position = null; game.history = []; game.handRow = null; game.handCol = null;
+  game.position = null; game.history = [];
+  game.handHigh = null; game.handLow = null; game.handSuit = null;
   document.getElementById('chart-view').classList.remove('show');
   showScreen('position');
 });

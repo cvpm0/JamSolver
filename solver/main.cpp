@@ -1,5 +1,5 @@
 #include "Solver.hpp"
-#include "../equity_engine/Cards.hpp"
+#include "../equity-engine/Cards.hpp"
 
 #include <iostream>
 #include <iomanip>
@@ -192,7 +192,7 @@ int main() {
     }
 
     // Persist to binary for the retrieval UI.
-    const char* out_path = "../ui/strategy.jams";
+    const char* out_path = "../docs/strategy.jams";
     if (save_strategy_binary(out_path, avg_strategy)) {
         std::cout << "\nStrategy saved to " << out_path
                   << " (" << (16 + NUM_STATES * NUM_HANDS * sizeof(double))
