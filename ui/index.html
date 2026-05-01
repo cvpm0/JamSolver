@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JamSolver">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%230e0e10'/%3E%3Ctext x='32' y='48' font-family='Georgia,serif' font-style='italic' font-size='52' fill='%23d97757' text-anchor='middle'%3EJ%3C/text%3E%3C/svg%3E">
+<title>JamSolver — 8bb 4-handed</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ───────── reset + tokens ───────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e0e10;
+    --bg-2:      #16161a;
+    --bg-3:      #1f1f25;
+    --line:      #2a2a32;
+    --line-2:    #3a3a45;
+    --ink:       #ece9e1;
+    --ink-mute:  #8a8a92;
+    --ink-dim:   #5a5a62;
+    --accent:    #d97757;        /* terra cotta */
+    --accent-2:  #f4b942;        /* warm amber */
+    --jam:       #d97757;
+    --fold:      #6a8b7c;        /* muted sage */
+    --mixed:     #b8a872;        /* muted gold */
+
+    --serif: "Fraunces", Georgia, serif;
+    --sans:  "Inter Tight", system-ui, sans-serif;
+    --mono:  "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  body {
+    padding: max(env(safe-area-inset-top), 1rem) 1rem max(env(safe-area-inset-bottom), 1rem);
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+
+  /* ───────── header ───────── */
+  .app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 1.5rem;
+  }
+  .brand {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 1.4rem;
+    letter-spacing: -0.01em;
+  }
+  .brand em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .meta {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-dim);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* ───────── stepper ───────── */
+  .stepper {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.75rem;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .step {
+    flex: 1;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--line);
+    color: var(--ink-dim);
+    transition: color 0.3s, border-color 0.3s;
+  }
+  .step.active {
+    color: var(--accent);
+    border-top-color: var(--accent);
+  }
+  .step.done {
+    color: var(--ink-mute);
+    border-top-color: var(--ink-mute);
+  }
+
+  /* ───────── screens ───────── */
+  .main { flex: 1; display: flex; flex-direction: column; }
+
+  .screen {
+    display: none;
+    animation: fadeIn 0.35s ease;
+  }
+  .screen.active { display: flex; flex-direction: column; flex: 1; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .prompt {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 1.65rem;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.4rem;
+  }
+  .prompt em { font-style: italic; color: var(--accent); }
+  .sub {
+    color: var(--ink-mute);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  /* ───────── position grid ───────── */
+  .pos-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .pos-btn {
+    aspect-ratio: 1.4;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg-2);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 1rem;
+    text-align: left;
+    transition: all 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pos-btn:active { transform: scale(0.97); border-color: var(--accent); }
+  .pos-btn .label {
+    font-family: var(--serif);
+    font-size: 2rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  .pos-btn .desc {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ───────── action buttons ───────── */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  .action-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .action-row .who {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .action-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .act-btn {
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--bg-2);
+    font-family: var(--serif);
+    font-size: 1.2rem;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .act-btn:active { transform: scale(0.97); }
+  .act-btn.selected.jam   { border-color: var(--jam);  color: var(--jam);  background: rgba(217, 119, 87, 0.08); }
+  .act-btn.selected.fold  { border-color: var(--fold); color: var(--fold); background: rgba(106, 139, 124, 0.08); }
+
+  /* ───────── hand grid ───────── */
+  .hand-grid {
+    display: grid;
+    grid-template-columns: repeat(13, 1fr);
+    gap: 2px;
+    width: 100%;
+    aspect-ratio: 1;
+    margin-bottom: 1.5rem;
+  }
+  .cell {
+    aspect-ratio: 1;
+    background: var(--bg-2);
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.55rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    color: var(--ink-mute);
+  }
+  .cell.pair    { background: var(--bg-3); color: var(--ink); }
+  .cell.suited  { color: var(--ink); }
+  .cell:active  { transform: scale(0.85); background: var(--accent); color: var(--bg); }
+  .cell.selected {
+    background: var(--accent);
+    color: var(--bg);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  /* ───────── result ───────── */
+  .result-card {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--bg-2);
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+    margin-bottom: 1.25rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .verdict {
+    font-family: var(--serif);
+    font-weight: 300;
+    font-size: 4.5rem;
+    line-height: 1;
+    letter-spacing: -0.04em;
+    margin: 0.5rem 0 0.75rem;
+  }
+  .verdict.jam   { color: var(--jam); }
+  .verdict.fold  { color: var(--fold); }
+  .verdict em    { font-style: italic; }
+
+  .prob {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+  }
+  .prob .num { color: var(--ink); font-size: 1rem; }
+
+  .context {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 1.5rem;
+    text-align: center;
+  }
+  .context .hand {
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    text-transform: none;
+    letter-spacing: -0.01em;
+    color: var(--accent);
+    font-style: italic;
+  }
+
+  .reroll {
+    width: 100%;
+    padding: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.6rem;
+    transition: all 0.15s;
+  }
+  .reroll:active { transform: scale(0.98); border-color: var(--accent); color: var(--accent); }
+
+  .chart-toggle {
+    width: 100%;
+    padding: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink-mute);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    transition: all 0.15s;
+  }
+  .chart-toggle:active { transform: scale(0.98); }
+
+  .chart-view {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    display: none;
+  }
+  .chart-view.show { display: block; }
+  .chart-view .hand-grid { margin-bottom: 0.75rem; }
+  .chart-view .cell {
+    pointer-events: none;
+    color: transparent;
+  }
+  .chart-view .cell.hero {
+    outline: 2px solid var(--ink);
+    outline-offset: 1px;
+    z-index: 1;
+  }
+  .legend {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0 2px;
+  }
+
+  /* ───────── nav / restart ───────── */
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1.5rem;
+    margin-top: auto;
+    border-top: 1px solid var(--line);
+  }
+  .nav-btn {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-mute);
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    transition: color 0.15s;
+  }
+  .nav-btn:active { color: var(--accent); }
+  .nav-btn.primary { color: var(--accent); }
+  .nav-btn:disabled { color: var(--ink-dim); cursor: default; }
+
+  /* ───────── error / loading ───────── */
+  .status-screen {
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+  .screen.status-screen.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+  }
+  .status-screen .icon {
+    font-family: var(--serif);
+    font-size: 3rem;
+    font-style: italic;
+    color: var(--accent);
+    margin-bottom: 1rem;
+  }
+  .status-screen .msg {
+    font-family: var(--serif);
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+  .status-screen .detail {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--ink-mute);
+    max-width: 280px;
+  }
+
+  /* the dot pulse for loading */
+  .dot-pulse {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50%      { opacity: 1;   transform: scale(1.1); }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand"><em>Jam</em>solver</div>
+  <div class="meta">8bb · 4-max</div>
+</header>
+
+<div class="stepper" id="stepper">
+  <div class="step active" data-step="position">Position</div>
+  <div class="step" data-step="action">Action</div>
+  <div class="step" data-step="hand">Hand</div>
+  <div class="step" data-step="result">Verdict</div>
+</div>
+
+<main class="main" id="main">
+
+  <!-- LOADING -->
+  <section class="screen active status-screen" id="screen-loading">
+    <div class="icon"><span class="dot-pulse"></span></div>
+    <div class="msg">Loading equilibrium…</div>
+    <div class="detail" id="loading-detail">Reading strategy.jams</div>
+  </section>
+
+  <!-- ERROR -->
+  <section class="screen status-screen" id="screen-error">
+    <div class="icon">!</div>
+    <div class="msg">Couldn't load strategy</div>
+    <div class="detail" id="error-detail"></div>
+  </section>
+
+  <!-- POSITION -->
+  <section class="screen" id="screen-position">
+    <h1 class="prompt">What's <em>your</em> position?</h1>
+    <p class="sub">4-handed. Pick where you're sitting.</p>
+    <div class="pos-grid">
+      <button class="pos-btn" data-pos="UTG"><span class="label">UTG</span><span class="desc">First to act</span></button>
+      <button class="pos-btn" data-pos="BTN"><span class="label">BTN</span><span class="desc">Button</span></button>
+      <button class="pos-btn" data-pos="SB"><span class="label">SB</span><span class="desc">Small blind</span></button>
+      <button class="pos-btn" data-pos="BB"><span class="label">BB</span><span class="desc">Big blind</span></button>
+    </div>
+  </section>
+
+  <!-- ACTION -->
+  <section class="screen" id="screen-action">
+    <h1 class="prompt">What happened <em>before</em> you?</h1>
+    <p class="sub" id="action-sub">Tap each player's action.</p>
+    <div class="actions" id="actions"></div>
+  </section>
+
+  <!-- HAND -->
+  <section class="screen" id="screen-hand">
+    <h1 class="prompt">What's your <em>hand</em>?</h1>
+    <p class="sub">Diagonal = pairs · upper = suited · lower = offsuit</p>
+    <div class="hand-grid" id="hand-grid"></div>
+  </section>
+
+  <!-- RESULT -->
+  <section class="screen" id="screen-result">
+    <div class="result-card">
+      <div class="prob"><span class="num" id="prob-pct">—</span> jam frequency</div>
+      <div class="verdict" id="verdict">—</div>
+      <div class="prob" id="prob-detail">—</div>
+    </div>
+    <div class="context" id="context-line">—</div>
+    <button class="reroll" id="reroll">↻ Reroll the dice</button>
+    <button class="chart-toggle" id="chart-toggle">View full chart</button>
+    <div class="chart-view" id="chart-view">
+      <div class="hand-grid" id="chart-grid"></div>
+      <div class="legend">
+        <span>Fold</span>
+        <span>Mixed</span>
+        <span>Jam</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="nav" id="nav">
+  <button class="nav-btn" id="back-btn">← Back</button>
+  <button class="nav-btn primary" id="restart-btn" style="display:none">Start over</button>
+</nav>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+//  STRATEGY DATA — loaded from strategy.jams
+// ─────────────────────────────────────────────────────────────
+const STRATEGY = { loaded: false, view: null, numStates: 0, numHands: 0 };
+
+async function loadStrategy() {
+  try {
+    const res = await fetch('strategy.jams', { cache: 'force-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const buf = await res.arrayBuffer();
+    const view = new DataView(buf);
+    const magic = view.getUint32(0, true);
+    if (magic !== 0x4A414D53) throw new Error('Bad magic number — not a JAMS file');
+    const version    = view.getUint32(4, true);
+    const numStates  = view.getUint32(8, true);
+    const numHands   = view.getUint32(12, true);
+    if (version !== 1)      throw new Error('Unsupported version ' + version);
+    if (numStates !== 14)   throw new Error('Expected 14 states, got ' + numStates);
+    if (numHands  !== 169)  throw new Error('Expected 169 hands, got ' + numHands);
+    Object.assign(STRATEGY, { loaded: true, view, numStates, numHands });
+    return true;
+  } catch (e) {
+    document.getElementById('error-detail').textContent = e.message;
+    showScreen('error');
+    return false;
+  }
+}
+
+function pJam(state, hand) {
+  const offset = 16 + (state * STRATEGY.numHands + hand) * 8;
+  return STRATEGY.view.getFloat64(offset, true);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  GAME-TREE: action history → state index
+// ─────────────────────────────────────────────────────────────
+//   States in CFR enum order:
+//     0 UTG, 1 BTN_F, 2 BTN_J, 3 SB_FF, 4 SB_FJ, 5 SB_JF, 6 SB_JJ,
+//     7 BB_FFJ, 8 BB_FJF, 9 BB_FJJ, 10 BB_JFF, 11 BB_JFJ, 12 BB_JJF, 13 BB_JJJ
+//   For BB the impossible "FFF" path (BB wins uncontested) is omitted in the tree.
+
+const STATE_INDEX = {
+  // hero=UTG: no prior action
+  'UTG|':       0,
+  // hero=BTN: 1 prior (UTG)
+  'BTN|F':      1,
+  'BTN|J':      2,
+  // hero=SB: 2 prior (UTG, BTN)
+  'SB|FF':      3,
+  'SB|FJ':      4,
+  'SB|JF':      5,
+  'SB|JJ':      6,
+  // hero=BB: 3 prior (UTG, BTN, SB)
+  'BB|FFJ':     7,
+  'BB|FJF':     8,
+  'BB|FJJ':     9,
+  'BB|JFF':    10,
+  'BB|JFJ':    11,
+  'BB|JJF':    12,
+  'BB|JJJ':    13,
+};
+
+// Players acting before each position (in order)
+const PRIOR_PLAYERS = {
+  UTG: [],
+  BTN: ['UTG'],
+  SB:  ['UTG', 'BTN'],
+  BB:  ['UTG', 'BTN', 'SB'],
+};
+
+// ─────────────────────────────────────────────────────────────
+//  HAND INDEXING
+// ─────────────────────────────────────────────────────────────
+//  Standard 13×13 grid layout. Rank order: A(12) K(11) Q(10) J(9) T(8) 9..2(0).
+//  Row = the higher rank, Col = the lower rank.
+//  Diagonal = pair. Above diagonal (col > row, in our layout = row < col) = suited.
+//  Below diagonal = offsuit.
+//
+//  hand_index = row*13 + col,  where row/col are positions in the rank order
+//  with A in slot 0, K in slot 1, ..., 2 in slot 12 (i.e. descending).
+//
+//  This MUST match the CLASS_TO_HAND order in your C++ Cards.hpp.
+//  If your C++ uses a different ordering, change ONLY the function below.
+//  See debug-section near bottom for verification helpers.
+const RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+
+function handIndex(row, col) {
+  return row * 13 + col;
+}
+
+function handLabel(row, col) {
+  const hi = RANKS[Math.min(row, col)];
+  const lo = RANKS[Math.max(row, col)];
+  if (row === col) return hi + hi;            // pair
+  if (row < col)   return hi + lo + 's';      // upper triangle (above diagonal) = suited
+  return hi + lo + 'o';                       // lower triangle = offsuit
+}
+//  Layout: row 0 = A at the TOP, col 0 = A on the LEFT.
+//  Cell (0,1): row=A, col=K → upper-right of diagonal → AKs.   ✓
+//  Cell (1,0): row=K, col=A → lower-left of diagonal → AKo.    ✓
+//  Diagonal (i,i) = pairs.
+
+// ─────────────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────────────
+const game = {
+  position: null,        // 'UTG' | 'BTN' | 'SB' | 'BB'
+  history:  [],          // array of 'J' | 'F' for each prior player
+  handRow:  null,
+  handCol:  null,
+  prob:     null,
+  rolled:   null,        // 'JAM' or 'FOLD'
+};
+
+// ─────────────────────────────────────────────────────────────
+//  SCREEN ROUTING
+// ─────────────────────────────────────────────────────────────
+const SCREEN_ORDER = ['position', 'action', 'hand', 'result'];
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('screen-' + name);
+  if (el) el.classList.add('active');
+
+  // stepper
+  const idx = SCREEN_ORDER.indexOf(name);
+  document.querySelectorAll('.step').forEach((s, i) => {
+    s.classList.remove('active', 'done');
+    if (i === idx) s.classList.add('active');
+    else if (i < idx) s.classList.add('done');
+  });
+  document.getElementById('stepper').style.visibility =
+    SCREEN_ORDER.includes(name) ? 'visible' : 'hidden';
+
+  // back/restart visibility
+  const showNav = ['action', 'hand', 'result'].includes(name);
+  document.getElementById('nav').style.display = showNav ? 'flex' : 'none';
+  document.getElementById('back-btn').style.display    = (name === 'result') ? 'none' : 'inline-block';
+  document.getElementById('restart-btn').style.display = (name === 'result') ? 'inline-block' : 'none';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  POSITION SCREEN
+// ─────────────────────────────────────────────────────────────
+document.querySelectorAll('.pos-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    game.position = btn.dataset.pos;
+    game.history = [];
+    if (PRIOR_PLAYERS[game.position].length === 0) {
+      // UTG: skip action screen
+      goToHand();
+    } else {
+      buildActionScreen();
+      showScreen('action');
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+//  ACTION SCREEN
+// ─────────────────────────────────────────────────────────────
+function buildActionScreen() {
+  const players = PRIOR_PLAYERS[game.position];
+  const container = document.getElementById('actions');
+  container.innerHTML = '';
+
+  // Build each row. After the first jam, subsequent actions are Call/Fold semantically.
+  let someoneJammed = game.history.includes('J');
+
+  players.forEach((p, i) => {
+    // For rows beyond the current decision point, we leave them empty until prior is set
+    if (i > game.history.length) return;
+
+    const row = document.createElement('div');
+    row.className = 'action-row';
+
+    const who = document.createElement('div');
+    who.className = 'who';
+    // Has someone jammed BEFORE this player's turn?
+    const jammedBefore = game.history.slice(0, i).includes('J');
+    who.textContent = jammedBefore ? p + ' — facing jam' : p + ' — first decision';
+    row.appendChild(who);
+
+    const buttons = document.createElement('div');
+    buttons.className = 'action-buttons';
+
+    const jamLabel = jammedBefore ? 'Call' : 'Jam';
+    const jamBtn = document.createElement('button');
+    jamBtn.className = 'act-btn';
+    jamBtn.textContent = jamLabel;
+    jamBtn.dataset.action = 'J';
+
+    const foldBtn = document.createElement('button');
+    foldBtn.className = 'act-btn';
+    foldBtn.textContent = 'Fold';
+    foldBtn.dataset.action = 'F';
+
+    // mark already-selected
+    if (game.history[i] === 'J') jamBtn.classList.add('selected', 'jam');
+    if (game.history[i] === 'F') foldBtn.classList.add('selected', 'fold');
+
+    [jamBtn, foldBtn].forEach(b => {
+      b.addEventListener('click', () => {
+        // truncate history at this index, set new value
+        game.history = game.history.slice(0, i);
+        game.history.push(b.dataset.action);
+        // rebuild (next row will appear if needed)
+        buildActionScreen();
+        // if we have all needed actions, advance
+        if (game.history.length === players.length) {
+          // small delay so user sees their selection
+          setTimeout(goToHand, 220);
+        }
+      });
+    });
+
+    buttons.appendChild(jamBtn);
+    buttons.appendChild(foldBtn);
+    row.appendChild(buttons);
+    container.appendChild(row);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+//  HAND SCREEN
+// ─────────────────────────────────────────────────────────────
+function buildHandGrid(containerId, opts = {}) {
+  const grid = document.getElementById(containerId);
+  grid.innerHTML = '';
+  for (let r = 0; r < 13; r++) {
+    for (let c = 0; c < 13; c++) {
+      const cell = document.createElement('button');
+      cell.className = 'cell';
+      if (r === c) cell.classList.add('pair');
+      else if (r < c) cell.classList.add('suited');   // upper-right
+      else cell.classList.add('offsuit');             // lower-left
+      cell.textContent = handLabel(r, c);
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+
+      if (opts.colorByProb && game.position) {
+        // chart view: color by P(jam) for this state
+        const stateKey = game.position + '|' + game.history.join('');
+        const stateIdx = STATE_INDEX[stateKey];
+        if (stateIdx !== undefined) {
+          const p = pJam(stateIdx, handIndex(r, c));
+          cell.style.background = probColor(p);
+          if (game.handRow === r && game.handCol === c) cell.classList.add('hero');
+        }
+      } else {
+        cell.addEventListener('click', () => {
+          game.handRow = r;
+          game.handCol = c;
+          computeAndShowResult();
+        });
+      }
+      grid.appendChild(cell);
+    }
+  }
+}
+
+function probColor(p) {
+  // gradient: 0 = sage (fold), 0.5 = gold (mixed), 1 = terra (jam)
+  // simple piecewise interpolation in HSL-ish space
+  if (p < 0.5) {
+    const t = p / 0.5;
+    return mix('#1f2a26', '#3a3320', t);
+  } else {
+    const t = (p - 0.5) / 0.5;
+    return mix('#3a3320', '#5a2818', t);
+  }
+}
+function mix(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ar = (pa>>16)&255, ag = (pa>>8)&255, ab = pa&255;
+  const br = (pb>>16)&255, bg = (pb>>8)&255, bb = pb&255;
+  const r = Math.round(ar + (br-ar)*t);
+  const g = Math.round(ag + (bg-ag)*t);
+  const bl = Math.round(ab + (bb-ab)*t);
+  return '#' + ((1<<24) | (r<<16) | (g<<8) | bl).toString(16).slice(1);
+}
+
+function goToHand() {
+  buildHandGrid('hand-grid');
+  showScreen('hand');
+}
+
+// ─────────────────────────────────────────────────────────────
+//  RESULT SCREEN
+// ─────────────────────────────────────────────────────────────
+function computeAndShowResult() {
+  const stateKey = game.position + '|' + game.history.join('');
+  const stateIdx = STATE_INDEX[stateKey];
+  if (stateIdx === undefined) {
+    document.getElementById('error-detail').textContent = 'No state for ' + stateKey;
+    showScreen('error');
+    return;
+  }
+  const hIdx = handIndex(game.handRow, game.handCol);
+  game.prob = pJam(stateIdx, hIdx);
+
+  rollDice();
+
+  // populate result UI
+  const handStr = handLabel(game.handRow, game.handCol);
+  const histStr = game.history.length
+    ? PRIOR_PLAYERS[game.position]
+        .map((p, i) => p + (game.history[i] === 'J' ? (game.history.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
+        .join(' · ')
+    : 'first to act';
+  document.getElementById('context-line').innerHTML =
+    game.position + ' · ' + histStr + ' · <span class="hand">' + handStr + '</span>';
+
+  buildHandGrid('chart-grid', { colorByProb: true });
+  document.getElementById('chart-view').classList.remove('show');
+  document.getElementById('chart-toggle').textContent = 'View full chart';
+  showScreen('result');
+}
+
+function rollDice() {
+  const p = game.prob;
+  // round display to nearest 5% to hide convergence noise (raw value used for the roll)
+  const rounded = Math.round(p * 20) / 20;
+  const pct = Math.round(rounded * 100);
+  const roll = Math.random();
+  game.rolled = (roll < p) ? 'JAM' : 'FOLD';
+
+  document.getElementById('prob-pct').textContent = pct + '%';
+  const verdict = document.getElementById('verdict');
+  verdict.textContent = game.rolled.toLowerCase();
+  verdict.className = 'verdict ' + (game.rolled === 'JAM' ? 'jam' : 'fold');
+
+  let detail;
+  if (p >= 0.95)      detail = 'pure jam';
+  else if (p <= 0.05) detail = 'pure fold';
+  else if (p > 0.5)   detail = 'mostly jam';
+  else                detail = 'mostly fold';
+  document.getElementById('prob-detail').textContent = detail;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  NAV
+// ─────────────────────────────────────────────────────────────
+document.getElementById('back-btn').addEventListener('click', () => {
+  // simple linear back
+  const screens = ['position', 'action', 'hand'];
+  const cur = document.querySelector('.screen.active').id.replace('screen-', '');
+  const i = screens.indexOf(cur);
+  if (i <= 0) return;
+  if (cur === 'hand' && PRIOR_PLAYERS[game.position].length === 0) {
+    showScreen('position');
+  } else {
+    showScreen(screens[i - 1]);
+  }
+});
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+  game.position = null; game.history = []; game.handRow = null; game.handCol = null;
+  document.getElementById('chart-view').classList.remove('show');
+  showScreen('position');
+});
+
+document.getElementById('reroll').addEventListener('click', rollDice);
+
+document.getElementById('chart-toggle').addEventListener('click', () => {
+  const cv = document.getElementById('chart-view');
+  cv.classList.toggle('show');
+  document.getElementById('chart-toggle').textContent =
+    cv.classList.contains('show') ? 'Hide chart' : 'View full chart';
+});
+
+// ─────────────────────────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────────────────────────
+(async function() {
+  const ok = await loadStrategy();
+  if (ok) showScreen('position');
+})();
+
+// ─────────────────────────────────────────────────────────────
+//  DEBUG HELPERS — open the browser console and call:
+//    debugHand('AKs')   → prints index + P(jam) for each state
+//    debugState('SB|FF')→ prints jam% for every hand in that state
+// ─────────────────────────────────────────────────────────────
+window.debugHand = function(label) {
+  for (let r = 0; r < 13; r++) for (let c = 0; c < 13; c++) {
+    if (handLabel(r,c) === label) {
+      const idx = handIndex(r,c);
+      console.log('Hand', label, '→ index', idx);
+      Object.entries(STATE_INDEX).forEach(([k, s]) => {
+        console.log('  ', k.padEnd(8), '→', (pJam(s, idx)*100).toFixed(1) + '%');
+      });
+      return;
+    }
+  }
+  console.warn('No hand', label);
+};
+window.debugState = function(stateKey) {
+  const s = STATE_INDEX[stateKey];
+  if (s === undefined) { console.warn('No state', stateKey); return; }
+  const rows = [];
+  for (let r = 0; r < 13; r++) {
+    let row = '';
+    for (let c = 0; c < 13; c++) {
+      const p = pJam(s, handIndex(r,c));
+      row += (p*100).toFixed(0).padStart(4);
+    }
+    rows.push(row);
+  }
+  console.log('State', stateKey, '— jam% per hand:');
+  console.log(rows.join('\n'));
+};
+
+</script>
+</body>
+</html>

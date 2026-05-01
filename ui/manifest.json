@@ -1,0 +1,14 @@
+{
+  "name": "JamSolver",
+  "short_name": "JamSolver",
+  "description": "8bb 4-handed jam-or-fold preflop solver",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e0e10",
+  "theme_color": "#0e0e10",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
