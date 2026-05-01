@@ -211,19 +211,27 @@
   .act-btn.selected.fold  { border-color: var(--fold); color: var(--fold); background: rgba(106, 139, 124, 0.08); }
 
   /* ───────── rank picker ───────── */
+  /* Three rows grouped semantically: broadways (A K Q J T), high (9 8 7 6), low (5 4 3 2) */
   .rank-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
     margin-bottom: 1rem;
   }
+  .rank-row {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .rank-row.broadways { grid-template-columns: repeat(5, 1fr); }
+  .rank-row.mids      { grid-template-columns: repeat(4, 1fr); }
+  .rank-row.lows      { grid-template-columns: repeat(4, 1fr); }
   .rank-btn {
     aspect-ratio: 1;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 14px;
     background: var(--bg-2);
     font-family: var(--serif);
-    font-size: 1.6rem;
+    font-size: 2rem;
     font-weight: 400;
     color: var(--ink);
     transition: all 0.15s;
@@ -279,8 +287,8 @@
     font-size: 2rem;
     line-height: 1;
   }
-  .suit-cards .card.heart { color: var(--jam); }
-  .suit-cards .card.spade { color: var(--ink-mute); }
+  .suit-cards .card.heart   { color: var(--jam); }
+  .suit-cards .card.diamond { color: var(--jam); }
 
   /* ───────── hand grid (chart view only) ───────── */
   .hand-grid {
@@ -565,7 +573,7 @@
       </button>
       <button class="suit-btn" data-suit="o">
         <span class="suit-label">Offsuit</span>
-        <span class="suit-cards"><span class="card heart">♥</span><span class="card spade">♠</span></span>
+        <span class="suit-cards"><span class="card heart">♥</span><span class="card diamond">♦</span></span>
       </button>
     </div>
   </section>
@@ -904,20 +912,33 @@ function goToActionOrResult() {
 function buildRankPicker(containerId, opts) {
   const grid = document.getElementById(containerId);
   grid.innerHTML = '';
-  for (let r = 0; r < 13; r++) {
-    const btn = document.createElement('button');
-    btn.className = 'rank-btn';
-    btn.textContent = RANKS[r];
-    btn.dataset.rank = r;
-    if (opts.disableAbove !== null && r < opts.disableAbove) {
-      btn.classList.add('disabled');
+
+  // Three rows, semantically grouped
+  // RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2']  indexes 0..12
+  const rowSpec = [
+    { cls: 'broadways', start: 0, end: 5  },  // A K Q J T
+    { cls: 'mids',      start: 5, end: 9  },  // 9 8 7 6
+    { cls: 'lows',      start: 9, end: 13 },  // 5 4 3 2
+  ];
+
+  for (const row of rowSpec) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'rank-row ' + row.cls;
+    for (let r = row.start; r < row.end; r++) {
+      const btn = document.createElement('button');
+      btn.className = 'rank-btn';
+      btn.textContent = RANKS[r];
+      btn.dataset.rank = r;
+      if (opts.disableAbove !== null && r < opts.disableAbove) {
+        btn.classList.add('disabled');
+      }
+      if (opts.highlightHigh === r) {
+        btn.classList.add('selected');
+      }
+      btn.addEventListener('click', () => opts.onPick(r));
+      rowEl.appendChild(btn);
     }
-    if (opts.highlightHigh === r) {
-      // make pair-of-this-rank visually obvious: glowing accent
-      btn.classList.add('selected');
-    }
-    btn.addEventListener('click', () => opts.onPick(r));
-    grid.appendChild(btn);
+    grid.appendChild(rowEl);
   }
 }
 
