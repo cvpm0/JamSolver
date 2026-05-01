@@ -104,7 +104,7 @@ namespace Debug {
             "2","3","4","5","6","7","8","9","T","J","Q","K","A"
         };
         static constexpr const char* SUITS[] = {
-            "c","d","h","s"
+            "♣","♦","♥","♠"
         };
         static constexpr const char* COLOURS[] = {
             "\033[38;2;0;200;83m",    // clubs    — green

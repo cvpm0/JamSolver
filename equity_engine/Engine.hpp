@@ -4,9 +4,9 @@
 #include "Evaluator.hpp"
 #include "Canonicalise.hpp"
 
-constexpr int    NUM_TRIALS_2WAY = 10'000; // 1'000'000 when not testing
-constexpr int    NUM_TRIALS_3WAY = 5'000; // 500'000 when not testing
-constexpr int    NUM_TRIALS_4WAY = 100; // 50'000 when not testing
+constexpr int    NUM_TRIALS_2WAY = 1'000; // 1'000'000 when not testing
+constexpr int    NUM_TRIALS_3WAY = 200; // 500'000 when not testing
+constexpr int    NUM_TRIALS_4WAY = 5; // 50'000 when not testing
 
 constexpr double EQUITY_SCALE    = 65535.0;
 
@@ -51,6 +51,10 @@ constexpr auto CLASS_TO_HAND = []() {
 
     return table;
 }();
+
+constexpr int is_pair(int hand_class) { return (hand_class <= 12) ? 1 : 0; }
+
+constexpr int is_suited(int hand_class) { return (hand_class >= 13 && hand_class <= 90) ? 1 : 0; }
 
 
 void run_montecarlo(const Hand* hands, int n, PCG32& rng, Deck& deck,

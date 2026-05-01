@@ -1,5 +1,7 @@
 #include "Engine.hpp"
 #include <thread>
+#include <cstdio>
+#include <cstdlib>
 
 std::vector<uint16_t> equity_2way(NUM_2WAY * 2, 0);
 std::vector<uint16_t> equity_3way(NUM_3WAY * 3, 0);
@@ -26,6 +28,17 @@ int main() {
     run(run_matchups_2way, equity_2way);
     run(run_matchups_3way, equity_3way);
     run(run_matchups_4way, equity_4way);
+
+    // write tables to binary files
+    auto write_table = [](const char* path, const std::vector<uint16_t>& tbl) {
+        FILE* f = std::fopen(path, "wb");
+        if (!f) { std::perror(path); std::exit(1); }
+        std::fwrite(tbl.data(), sizeof(uint16_t), tbl.size(), f);
+        std::fclose(f);
+    };
+    write_table("../data/equity_2way.bin", equity_2way);
+    write_table("../data/equity_3way.bin", equity_3way);
+    write_table("../data/equity_4way.bin", equity_4way);
 
     // 2-way validation
     uint32_t aa_kk   = combo_index(0, 1);

@@ -3,9 +3,12 @@ equity_engine/a.out
 equity_engine/equity_engine
 a.out
 
+# Data
+data/equity_2way.bin
+data/equity_3way.bin
+data/equity_4way.bin
+
+
 # Build directories
 build/
 cmake-build-*/
-
-# gprof output
-gmon.out
