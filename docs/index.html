@@ -295,7 +295,8 @@
   }
   .suit-cards .card.heart   { color: var(--jam); }
   .suit-cards .card.diamond { color: var(--jam); }
-  .suit-cards .card.spade   { color: var(--ink); }
+  .suit-cards .card.club    { color: #6a8b7c; }   /* muted sage — leaves */
+  .suit-cards .card.spade   { color: #8a7d9b; }   /* muted plum — earth */
 
   /* ───────── hand grid (chart view only) ───────── */
   .hand-grid {
@@ -399,13 +400,7 @@
     gap: 0.65rem;
   }
   .reroll:active { transform: scale(0.98); border-color: var(--accent); color: var(--accent); }
-  .reroll:active .die-icon { animation: tumble 0.5s ease; }
-  .die-icon { width: 28px; height: 22px; flex-shrink: 0; transform-origin: center; }
-  @keyframes tumble {
-    0%   { transform: rotate(0)   scale(1);   }
-    50%  { transform: rotate(180deg) scale(1.15); }
-    100% { transform: rotate(360deg) scale(1);  }
-  }
+  .die-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
   .chart-toggle {
     width: 100%;
@@ -429,24 +424,51 @@
     display: none;
   }
   .chart-view.show { display: block; }
-  .chart-view .hand-grid { margin-bottom: 0.75rem; }
+  .chart-view .chart-title {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-align: center;
+    margin-bottom: 0.75rem;
+  }
+  .chart-view .hand-grid { margin-bottom: 0.75rem; gap: 1px; }
   .chart-view .cell {
     pointer-events: none;
-    color: transparent;
+    font-family: var(--mono);
+    font-size: 0.5rem;
+    font-weight: 500;
+    color: rgba(255,255,255,0.85);
+    text-shadow: 0 1px 1px rgba(0,0,0,0.4);
   }
   .chart-view .cell.hero {
     outline: 2px solid var(--ink);
-    outline-offset: 1px;
+    outline-offset: 0;
     z-index: 1;
+    position: relative;
   }
   .legend {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 0.5rem;
+  }
+  .legend-bar {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .legend-bar span { flex: 1; }
+  .legend-row {
     display: flex;
     justify-content: space-between;
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--ink-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
     padding: 0 2px;
   }
 
@@ -592,7 +614,7 @@
       </button>
       <button class="suit-btn" data-suit="o">
         <span class="suit-label">Offsuit</span>
-        <span class="suit-cards"><span class="card diamond">♦</span><span class="card spade">♠</span></span>
+        <span class="suit-cards"><span class="card club">♣</span><span class="card spade">♠</span></span>
       </button>
     </div>
   </section>
@@ -606,42 +628,27 @@
     </div>
     <div class="context" id="context-line">—</div>
     <button class="reroll" id="reroll">
-      <svg class="die-icon" viewBox="0 0 36 26" aria-hidden="true">
-        <!-- back die, slightly rotated, lower opacity -->
-        <g transform="translate(20 5) rotate(-12)" opacity="0.55">
-          <!-- top face -->
-          <path d="M0,-9 L7.79,-4.5 L0,0 L-7.79,-4.5 Z" fill="var(--bg-3)" stroke="var(--ink-mute)" stroke-width="0.9" stroke-linejoin="round"/>
-          <!-- right face -->
-          <path d="M7.79,-4.5 L7.79,4.5 L0,9 L0,0 Z" fill="var(--bg-2)" stroke="var(--ink-mute)" stroke-width="0.9" stroke-linejoin="round"/>
-          <!-- left face -->
-          <path d="M-7.79,-4.5 L0,0 L0,9 L-7.79,4.5 Z" fill="var(--bg-3)" stroke="var(--ink-mute)" stroke-width="0.9" stroke-linejoin="round"/>
-          <!-- pips: 1 on top, 2 on right -->
-          <circle cx="0" cy="-4.5" r="0.9" fill="var(--ink-mute)"/>
-          <circle cx="3" cy="-1.5" r="0.7" fill="var(--ink-mute)"/>
-          <circle cx="5.5" cy="3"   r="0.7" fill="var(--ink-mute)"/>
-        </g>
-        <!-- front die -->
-        <g transform="translate(13 14)">
-          <path d="M0,-10 L8.66,-5 L0,0 L-8.66,-5 Z" fill="var(--bg-3)" stroke="var(--ink)" stroke-width="1" stroke-linejoin="round"/>
-          <path d="M8.66,-5 L8.66,5 L0,10 L0,0 Z"     fill="var(--bg-2)" stroke="var(--ink)" stroke-width="1" stroke-linejoin="round"/>
-          <path d="M-8.66,-5 L0,0 L0,10 L-8.66,5 Z"   fill="var(--bg-3)" stroke="var(--ink)" stroke-width="1" stroke-linejoin="round"/>
-          <!-- pips: 3 on top (diagonal), 2 on right -->
-          <circle cx="-3" cy="-6.5" r="1" fill="var(--accent)"/>
-          <circle cx="0"  cy="-5"   r="1" fill="var(--accent)"/>
-          <circle cx="3"  cy="-3.5" r="1" fill="var(--accent)"/>
-          <circle cx="3"  cy="-1"   r="0.9" fill="var(--ink)"/>
-          <circle cx="6"  cy="3.5"  r="0.9" fill="var(--ink)"/>
-        </g>
+      <svg class="die-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect width="18" height="18" x="3" y="3" rx="3" ry="3"/>
+        <path d="M16 8h.01"/>
+        <path d="M8 8h.01"/>
+        <path d="M12 12h.01"/>
+        <path d="M16 16h.01"/>
+        <path d="M8 16h.01"/>
       </svg>
       <span>Reroll</span>
     </button>
     <button class="chart-toggle" id="chart-toggle">View full chart</button>
     <div class="chart-view" id="chart-view">
+      <div class="chart-title" id="chart-title">Strategy for this state</div>
       <div class="hand-grid" id="chart-grid"></div>
       <div class="legend">
-        <span>Fold</span>
-        <span>Mixed</span>
-        <span>Jam</span>
+        <div class="legend-bar" id="legend-bar"></div>
+        <div class="legend-row">
+          <span>0% jam</span>
+          <span>50%</span>
+          <span>100% jam</span>
+        </div>
       </div>
     </div>
   </section>
@@ -1003,6 +1010,16 @@ function buildChartGrid() {
   const stateKey = game.position + '|' + game.history.join('');
   const stateIdx = STATE_INDEX[stateKey];
 
+  // Title: explain what the chart shows
+  const title = document.getElementById('chart-title');
+  if (title) {
+    const histPart = game.history.length === 0 ? 'first to act' :
+      'after ' + PRIOR_PLAYERS[game.position]
+        .map((p, i) => p + (game.history[i] === 'J' ? (game.history.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
+        .join(', ');
+    title.textContent = `${game.position} strategy — ${histPart}`;
+  }
+
   for (let r = 0; r < 13; r++) {
     for (let c = 0; c < 13; c++) {
       const cell = document.createElement('div');
@@ -1019,17 +1036,28 @@ function buildChartGrid() {
       grid.appendChild(cell);
     }
   }
+
+  // Legend gradient bar — 11 stops representing 0%, 10%, 20% ... 100%
+  const bar = document.getElementById('legend-bar');
+  if (bar) {
+    bar.innerHTML = '';
+    for (let i = 0; i <= 10; i++) {
+      const s = document.createElement('span');
+      s.style.background = probColor(i / 10);
+      bar.appendChild(s);
+    }
+  }
 }
 
 function probColor(p) {
-  // gradient: 0 = sage (fold), 0.5 = gold (mixed), 1 = terra (jam)
-  // simple piecewise interpolation in HSL-ish space
+  // gradient for chart heatmap: 0=sage(fold), 0.5=amber(mixed), 1=terra(jam)
+  // brightened so labels remain legible and cells visually distinct
   if (p < 0.5) {
     const t = p / 0.5;
-    return mix('#1f2a26', '#3a3320', t);
+    return mix('#3a5147', '#7a6a3a', t);   // deep sage → warm olive
   } else {
     const t = (p - 0.5) / 0.5;
-    return mix('#3a3320', '#5a2818', t);
+    return mix('#7a6a3a', '#b8552e', t);   // warm olive → saturated terra
   }
 }
 function mix(a, b, t) {
