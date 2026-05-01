@@ -75,7 +75,13 @@
     font-weight: 400;
     font-size: 1.4rem;
     letter-spacing: -0.01em;
+    color: var(--ink);
+    cursor: pointer;
+    padding: 0;
+    transition: opacity 0.15s;
+    -webkit-tap-highlight-color: transparent;
   }
+  .brand:active { opacity: 0.6; }
   .brand em {
     font-style: italic;
     color: var(--accent);
@@ -289,6 +295,7 @@
   }
   .suit-cards .card.heart   { color: var(--jam); }
   .suit-cards .card.diamond { color: var(--jam); }
+  .suit-cards .card.spade   { color: var(--ink); }
 
   /* ───────── hand grid (chart view only) ───────── */
   .hand-grid {
@@ -344,6 +351,7 @@
   }
   .verdict.jam   { color: var(--jam); }
   .verdict.fold  { color: var(--fold); }
+  .verdict.walk  { color: var(--mixed); font-style: italic; }
   .verdict em    { font-style: italic; }
 
   .prob {
@@ -385,8 +393,19 @@
     letter-spacing: 0.12em;
     margin-bottom: 0.6rem;
     transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
   }
   .reroll:active { transform: scale(0.98); border-color: var(--accent); color: var(--accent); }
+  .reroll:active .die-icon { animation: tumble 0.5s ease; }
+  .die-icon { width: 28px; height: 22px; flex-shrink: 0; transform-origin: center; }
+  @keyframes tumble {
+    0%   { transform: rotate(0)   scale(1);   }
+    50%  { transform: rotate(180deg) scale(1.15); }
+    100% { transform: rotate(360deg) scale(1);  }
+  }
 
   .chart-toggle {
     width: 100%;
@@ -502,7 +521,7 @@
 <body>
 
 <header class="app-header">
-  <div class="brand"><em>Jam</em>solver</div>
+  <button class="brand" id="brand-home" aria-label="Restart"><em>Jam</em>solver</button>
   <div class="meta">8bb · 4-max</div>
 </header>
 
@@ -573,7 +592,7 @@
       </button>
       <button class="suit-btn" data-suit="o">
         <span class="suit-label">Offsuit</span>
-        <span class="suit-cards"><span class="card heart">♥</span><span class="card diamond">♦</span></span>
+        <span class="suit-cards"><span class="card diamond">♦</span><span class="card spade">♠</span></span>
       </button>
     </div>
   </section>
@@ -586,7 +605,36 @@
       <div class="prob" id="prob-detail">—</div>
     </div>
     <div class="context" id="context-line">—</div>
-    <button class="reroll" id="reroll">↻ Reroll the dice</button>
+    <button class="reroll" id="reroll">
+      <svg class="die-icon" viewBox="0 0 36 26" aria-hidden="true">
+        <!-- back die, slightly rotated, lower opacity -->
+        <g transform="translate(20 5) rotate(-12)" opacity="0.55">
+          <!-- top face -->
+          <path d="M0,-9 L7.79,-4.5 L0,0 L-7.79,-4.5 Z" fill="var(--bg-3)" stroke="var(--ink-mute)" stroke-width="0.9" stroke-linejoin="round"/>
+          <!-- right face -->
+          <path d="M7.79,-4.5 L7.79,4.5 L0,9 L0,0 Z" fill="var(--bg-2)" stroke="var(--ink-mute)" stroke-width="0.9" stroke-linejoin="round"/>
+          <!-- left face -->
+          <path d="M-7.79,-4.5 L0,0 L0,9 L-7.79,4.5 Z" fill="var(--bg-3)" stroke="var(--ink-mute)" stroke-width="0.9" stroke-linejoin="round"/>
+          <!-- pips: 1 on top, 2 on right -->
+          <circle cx="0" cy="-4.5" r="0.9" fill="var(--ink-mute)"/>
+          <circle cx="3" cy="-1.5" r="0.7" fill="var(--ink-mute)"/>
+          <circle cx="5.5" cy="3"   r="0.7" fill="var(--ink-mute)"/>
+        </g>
+        <!-- front die -->
+        <g transform="translate(13 14)">
+          <path d="M0,-10 L8.66,-5 L0,0 L-8.66,-5 Z" fill="var(--bg-3)" stroke="var(--ink)" stroke-width="1" stroke-linejoin="round"/>
+          <path d="M8.66,-5 L8.66,5 L0,10 L0,0 Z"     fill="var(--bg-2)" stroke="var(--ink)" stroke-width="1" stroke-linejoin="round"/>
+          <path d="M-8.66,-5 L0,0 L0,10 L-8.66,5 Z"   fill="var(--bg-3)" stroke="var(--ink)" stroke-width="1" stroke-linejoin="round"/>
+          <!-- pips: 3 on top (diagonal), 2 on right -->
+          <circle cx="-3" cy="-6.5" r="1" fill="var(--accent)"/>
+          <circle cx="0"  cy="-5"   r="1" fill="var(--accent)"/>
+          <circle cx="3"  cy="-3.5" r="1" fill="var(--accent)"/>
+          <circle cx="3"  cy="-1"   r="0.9" fill="var(--ink)"/>
+          <circle cx="6"  cy="3.5"  r="0.9" fill="var(--ink)"/>
+        </g>
+      </svg>
+      <span>Reroll</span>
+    </button>
     <button class="chart-toggle" id="chart-toggle">View full chart</button>
     <div class="chart-view" id="chart-view">
       <div class="hand-grid" id="chart-grid"></div>
@@ -1002,8 +1050,44 @@ function goToHand() {
 // ─────────────────────────────────────────────────────────────
 //  RESULT SCREEN
 // ─────────────────────────────────────────────────────────────
+function showWalkResult() {
+  // Hide elements that don't apply to a walk
+  document.getElementById('prob-pct').textContent       = '—';
+  document.getElementById('prob-detail').textContent    = 'no decision';
+  document.querySelector('.prob:first-child').style.visibility = 'hidden';
+
+  const verdict = document.getElementById('verdict');
+  verdict.textContent = 'walk';
+  verdict.className = 'verdict walk';
+
+  const handStr = (game.handHigh !== null && game.handLow !== null)
+    ? handLabel(...handRowCol())
+    : '';
+  document.getElementById('context-line').innerHTML =
+    'BB · UTG folds · BTN folds · SB folds' + (handStr ? ' · <span class="hand">' + handStr + '</span>' : '');
+
+  // Hide reroll + chart toggle for walks
+  document.getElementById('reroll').style.display       = 'none';
+  document.getElementById('chart-toggle').style.display = 'none';
+  document.getElementById('chart-view').classList.remove('show');
+
+  showScreen('result');
+}
+
 function computeAndShowResult() {
   const stateKey = game.position + '|' + game.history.join('');
+
+  // Special case: BB and everyone folded → walk (BB wins the blinds, no decision)
+  if (stateKey === 'BB|FFF') {
+    showWalkResult();
+    return;
+  }
+
+  // Reset things showWalkResult may have hidden
+  document.querySelector('.prob:first-child').style.visibility = '';
+  document.getElementById('reroll').style.display       = '';
+  document.getElementById('chart-toggle').style.display = '';
+
   const stateIdx = STATE_INDEX[stateKey];
   if (stateIdx === undefined) {
     document.getElementById('error-detail').textContent = 'No state for ' + stateKey;
@@ -1083,11 +1167,19 @@ document.getElementById('back-btn').addEventListener('click', () => {
   }
 });
 
-document.getElementById('restart-btn').addEventListener('click', () => {
+function restart() {
   game.position = null; game.history = [];
   game.handHigh = null; game.handLow = null; game.handSuit = null;
   document.getElementById('chart-view').classList.remove('show');
   showScreen('position');
+}
+document.getElementById('restart-btn').addEventListener('click', restart);
+document.getElementById('brand-home').addEventListener('click', () => {
+  // Only restart if we're past the position screen — avoids a useless click on the home page
+  const cur = document.querySelector('.screen.active');
+  if (cur && cur.id !== 'screen-position' && cur.id !== 'screen-loading') {
+    restart();
+  }
 });
 
 document.getElementById('reroll').addEventListener('click', rollDice);
