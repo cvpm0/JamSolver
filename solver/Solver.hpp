@@ -11,7 +11,7 @@
 
 constexpr int    NUM_STATES     = 14;
 constexpr int    NUM_HANDS      = 169;
-constexpr int    NUM_ITERATIONS = 50'000;
+constexpr int    NUM_ITERATIONS = 100'000;
 constexpr double STACK          = 8.0;
 constexpr double SB_BLIND       = 0.5;
 constexpr double BB_BLIND       = 1.0;
