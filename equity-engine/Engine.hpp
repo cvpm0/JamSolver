@@ -4,9 +4,9 @@
 #include "Evaluator.hpp"
 #include "Canonicalise.hpp"
 
-constexpr int    NUM_TRIALS_2WAY = 100'000; // 1'000'000 when not testing
-constexpr int    NUM_TRIALS_3WAY = 1'000; // 500'000 when not testing
-constexpr int    NUM_TRIALS_4WAY = 200; // 50'000 when not testing
+constexpr int    NUM_TRIALS_2WAY = 1'000'000; // 1'000'000 when not testing
+constexpr int    NUM_TRIALS_3WAY = 100'000; // 500'000 when not testing
+constexpr int    NUM_TRIALS_4WAY = 1; // 50'000 when not testing - unused
 
 constexpr double EQUITY_SCALE    = 65535.0;
 

@@ -1,6 +1,5 @@
 # Compiled binaries
-equity_engine/a.out
-equity_engine/equity_engine
+equity-engine/a.out
 solver/a.out
 
 # Data
