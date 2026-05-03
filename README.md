@@ -1,8 +1,10 @@
 # JamSolver
 
-A preflop jam/fold solver for 4-player short-stack poker. Given a position and action history, it outputs a virtually unexploitable strategy — the jam frequency that no opponent adjustment can meaningfully profit against.
-
 [**Try it →**](https://cvpm0.github.io/JamSolver/)
+
+Note: Best on mobile or portrait tab
+
+A preflop jam/fold solver for 4-player short-stack poker. Given a position and action history, it outputs a virtually unexploitable strategy — the jam frequency that no opponent adjustment can meaningfully profit against.
 
 The project splits into two executables sharing a data layer: an **equity engine** that precomputes all-pairs matchup tables via Monte Carlo, and a **CFR+ solver** that finds equilibrium over a 14-state game tree using those tables as O(1) lookups. The solver output is consumed by a lightweight web frontend for table-side reference.
 
