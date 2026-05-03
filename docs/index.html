@@ -966,7 +966,7 @@ function showScreen(name) {
   // back/restart visibility
   const showNav = ['hand1', 'hand2', 'hand3', 'action', 'result'].includes(name);
   document.getElementById('nav').style.display = showNav ? 'flex' : 'none';
-  document.getElementById('back-btn').style.display    = (name === 'result') ? 'none' : 'inline-block';
+  document.getElementById('back-btn').style.display    = 'inline-block'; // always show on nav screens
   document.getElementById('restart-btn').style.display = 'none'; // replaced by result-restart button
 
   // Footer info: show player-count label on non-position screens
@@ -1277,9 +1277,8 @@ function showWalkResult() {
     : 'BB · uncontested' + (handStr ? ' · <span class="hand">' + handStr + '</span>' : '');
   document.getElementById('context-line').innerHTML = walkCtx;
 
-  // Hide reroll + chart toggle for walks
+  // Hide reroll + chart toggle for walks (start-over stays visible)
   document.getElementById('reroll').style.display       = 'none';
-  document.getElementById('result-restart').style.display = 'none';
   document.getElementById('chart-toggle').style.display = 'none';
   document.getElementById('chart-view').classList.remove('show');
 
@@ -1360,17 +1359,28 @@ function rollDice() {
 document.getElementById('back-btn').addEventListener('click', () => {
   const cur = document.querySelector('.screen.active').id.replace('screen-', '');
   switch (cur) {
+    case 'result':
+      // Back from result: go to action screen if there were prior players to ask about,
+      // otherwise go back into the hand picker (no action screen was shown)
+      if (priorPlayers(game.position).length > 0) {
+        buildActionScreen();
+        showScreen('action');
+      } else if (game.handHigh === game.handLow) {
+        goToHand2();
+      } else {
+        goToHand3();
+      }
+      break;
     case 'hand1':
       showScreen('position');
       break;
     case 'hand2':
-      goToHand1();  // rebuild rank picker 1 (re-enables all ranks visually)
+      goToHand1();
       break;
     case 'hand3':
       goToHand2();
       break;
     case 'action':
-      // back into the hand picker; if it was a pair, jump to hand2 (skip the suit step)
       if (game.handHigh === game.handLow) goToHand2();
       else                                 goToHand3();
       break;
