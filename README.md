@@ -2,7 +2,7 @@
 
 A preflop jam/fold solver for 4-player short-stack poker. Given a position and action history, it outputs a virtually unexploitable strategy — the jam frequency that no opponent adjustment can meaningfully profit against.
 
-[**Try it →**](https://your-github-username.github.io/JamSolver)
+[**Try it →**](https://cvpm0.github.io/JamSolver/)
 
 The project splits into two executables sharing a data layer: an **equity engine** that precomputes all-pairs matchup tables via Monte Carlo, and a **CFR+ solver** that finds equilibrium over a 14-state game tree using those tables as O(1) lookups. The solver output is consumed by a lightweight web frontend for table-side reference.
 
@@ -40,7 +40,7 @@ uint16_t c = mask & (mask >> 1) & (mask >> 2) & (mask >> 3) & (mask >> 4);
 
 The highest surviving bit (via `__builtin_clz`) gives the straight's top rank. The wheel (A-2-3-4-5) is a special-case bitmask check. All kicker extraction throughout the evaluator uses `__builtin_clz` on the residual mask after removing used ranks — no linear scan over 13 ranks.
 
-### Canonicalization and Collision Avoidance
+### Canonicalisation and Collision Avoidance
 
 A hand class like AKs doesn't specify suits — it could be any of four suit assignments. When setting up a multi-way simulation, concrete suits must be assigned to each player without card collisions. The engine resolves this with a `uint64_t` bitmask over the 52-card space: each candidate suit assignment is tested with a single AND against the occupied mask, and conflicts advance an odometer over a compile-time combo table (`constexpr` lambda, ~4.4 KB, L1-resident).
 
@@ -93,7 +93,7 @@ for (int i = 0; i < n; ++i) { ... }
 
 For the three-way cache this reduces the inner work from 169² ≈ 28k iterations to roughly 25² = 625 in late iterations — a 45× reduction that compounds across the 11 pairs × 169 hero hands evaluated each iteration. The compacted loop also eliminates branch misprediction overhead from `continue`-based zero-skipping, since every iteration does real work.
 
-Both cache fills are parallelized with OpenMP (`schedule(dynamic)` to handle variable cost across pairs with different range densities). Each parallel unit writes to a disjoint cache slice, so no synchronization is needed.
+Both cache fills are parallelised with OpenMP (`schedule(dynamic)` to handle variable cost across pairs with different range densities). Each parallel unit writes to a disjoint cache slice, so no synchronisation is needed.
 
 ### CFR+
 
@@ -103,4 +103,4 @@ Four-way pots (when all three opponents jam) are approximated using three-way eq
 
 ### Output
 
-Converged strategies are serialized to a `.jams` binary: a 16-byte header followed by `double[14][169]` row-major. Total file: 18,944 bytes. The web frontend reads a single `(state, hand)` entry at a known offset — no parsing, no deserialization.
+Converged strategies are serialised to a `.jams` binary: a 16-byte header followed by `double[14][169]` row-major. Total file: 18,944 bytes. The web frontend reads a single `(state, hand)` entry at a known offset — no parsing, no deserialisation.
