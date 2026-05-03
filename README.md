@@ -1,6 +1,8 @@
 # JamSolver
 
-A preflop jam/fold solver for 4-player short-stack poker. Given a position and action history, it outputs the Nash equilibrium strategy — the mixed jam frequency that cannot be exploited by any opponent adjustment.
+A preflop jam/fold solver for 4-player short-stack poker. Given a position and action history, it outputs a virtually unexploitable strategy — the jam frequency that no opponent adjustment can meaningfully profit against.
+
+[**Try it →**](https://your-github-username.github.io/JamSolver)
 
 The project splits into two executables sharing a data layer: an **equity engine** that precomputes all-pairs matchup tables via Monte Carlo, and a **CFR+ solver** that finds equilibrium over a 14-state game tree using those tables as O(1) lookups. The solver output is consumed by a lightweight web frontend for table-side reference.
 
@@ -59,7 +61,7 @@ Board sampling across Monte Carlo trials uses a snapshot mechanism: after removi
 
 ### Parallelism
 
-The 169 hero classes are partitioned across `std::thread` workers with per-thread `PCG32` and `Deck` instances. No shared mutable state exists in the hot path — no atomics, no locks, no false sharing. The RNG uses Lemire's nearly-divisionless method for unbiased bounded sampling, with each thread's stream seeded from hardware entropy with a forced-odd increment to guarantee full period.
+The 169 hero classes are partitioned across `std::thread` workers with per-thread `Deck` instances and a from-scratch `PCG32` implementation. No shared mutable state exists in the hot path — no atomics, no locks, no false sharing. The RNG implements Lemire's nearly-divisionless method for unbiased bounded sampling, with each thread's stream seeded from hardware entropy with a forced-odd increment to guarantee full period.
 
 ## Solver
 
