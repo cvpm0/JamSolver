@@ -169,6 +169,10 @@
     -webkit-tap-highlight-color: transparent;
   }
   .pos-btn:active { transform: scale(0.97); border-color: var(--accent); }
+  .pos-btn.disabled {
+    opacity: 0.25;
+    pointer-events: none;
+  }
   .pos-btn .label {
     font-family: var(--serif);
     font-size: 2rem;
@@ -181,6 +185,54 @@
     color: var(--ink-mute);
     text-transform: uppercase;
     letter-spacing: 0.08em;
+  }
+
+  /* ───────── player-count toggle ───────── */
+  .player-toggle {
+    margin-top: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .player-toggle .label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+  .player-pills {
+    display: flex;
+    gap: 0.6rem;
+  }
+  .player-pill {
+    width: 70px;
+    padding: 0.7rem 0;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: transparent;
+    font-family: var(--serif);
+    font-size: 1.3rem;
+    color: var(--ink-mute);
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .player-pill:active { transform: scale(0.95); }
+  .player-pill.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* ───────── footer player-count info (non-position screens) ───────── */
+  .nav-info {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--ink-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
   }
 
   /* ───────── action buttons ───────── */
@@ -562,7 +614,7 @@
 
 <header class="app-header">
   <button class="brand" id="brand-home" aria-label="Restart"><em>Jam</em>solver</button>
-  <div class="meta">8bb · 4-max</div>
+  <button class="meta" id="player-toggle" aria-label="Change player count">8bb · <span id="player-label">4</span>-max</button>
 </header>
 
 <div class="stepper" id="stepper">
@@ -591,12 +643,20 @@
   <!-- POSITION -->
   <section class="screen" id="screen-position">
     <h1 class="prompt">What's <em>your</em> position?</h1>
-    <p class="sub">4-handed. Pick where you're sitting.</p>
+    <p class="sub" id="position-sub">4-handed. Pick where you're sitting.</p>
     <div class="pos-grid">
       <button class="pos-btn" data-pos="UTG"><span class="label">UTG</span><span class="desc">First to act</span></button>
       <button class="pos-btn" data-pos="BTN"><span class="label">BTN</span><span class="desc">Button</span></button>
       <button class="pos-btn" data-pos="SB"><span class="label">SB</span><span class="desc">Small blind</span></button>
       <button class="pos-btn" data-pos="BB"><span class="label">BB</span><span class="desc">Big blind</span></button>
+    </div>
+    <div class="player-toggle">
+      <span class="label">Players</span>
+      <div class="player-pills">
+        <button class="player-pill" data-count="2">2</button>
+        <button class="player-pill" data-count="3">3</button>
+        <button class="player-pill active" data-count="4">4</button>
+      </div>
     </div>
   </section>
 
@@ -677,6 +737,7 @@
 <nav class="nav" id="nav">
   <button class="nav-btn" id="back-btn">← Back</button>
   <button class="nav-btn primary" id="restart-btn" style="display:none">Start over</button>
+  <span class="nav-info" id="nav-info"></span>
 </nav>
 
 <script>
@@ -744,13 +805,8 @@ const STATE_INDEX = {
   'BB|JJJ':    13,
 };
 
-// Players acting before each position (in order)
-const PRIOR_PLAYERS = {
-  UTG: [],
-  BTN: ['UTG'],
-  SB:  ['UTG', 'BTN'],
-  BB:  ['UTG', 'BTN', 'SB'],
-};
+// (Players acting before each position is now computed dynamically from
+//  game.playerCount via priorPlayers(pos). See game-state section below.)
 
 // ─────────────────────────────────────────────────────────────
 //  HAND INDEXING
@@ -816,13 +872,54 @@ function handLabel(row, col) {
 // ─────────────────────────────────────────────────────────────
 const game = {
   position: null,        // 'UTG' | 'BTN' | 'SB' | 'BB'
-  history:  [],          // array of 'J' | 'F' for each prior player
+  history:  [],          // array of 'J' | 'F' for ACTUAL prior players (not implicit folds)
   handHigh: null,        // 0..12 (rank index, 0=A)
   handLow:  null,        // 0..12 (rank index, 0=A)
   handSuit: null,        // 's' | 'o' (null when pair)
   prob:     null,
   rolled:   null,        // 'JAM' or 'FOLD'
+  playerCount: 4,        // 2, 3, or 4 — defaults to 4-max
 };
+
+// Active positions for current player count, in seating order
+function activePositions() {
+  if (game.playerCount === 2) return ['SB', 'BB'];
+  if (game.playerCount === 3) return ['BTN', 'SB', 'BB'];
+  return ['UTG', 'BTN', 'SB', 'BB'];
+}
+
+// Players acting before each position at current player count
+function priorPlayers(pos) {
+  const all = activePositions();
+  const idx = all.indexOf(pos);
+  return (idx <= 0) ? [] : all.slice(0, idx);
+}
+
+// Implicit folds for positions that don't exist at current player count.
+// At 3-handed UTG is treated as folded → prefix "F".
+// At 2-handed UTG and BTN both folded → prefix "FF".
+function implicitFoldPrefix() {
+  return 'F'.repeat(4 - game.playerCount);
+}
+
+// Construct state key for strategy lookup, including implicit folds for
+// missing positions. Hero=SB at 3-handed with BTN-fold history → key "SB|FF".
+function buildStateKey() {
+  return game.position + '|' + implicitFoldPrefix() + game.history.join('');
+}
+
+// Walk detection: hero=BB and every action (real + implicit) is a fold.
+// Universal across player counts.
+function isWalk() {
+  if (game.position !== 'BB') return false;
+  return game.history.every(a => a === 'F');
+}
+
+// Human-readable footer text for current player count
+function playerCountLabel() {
+  if (game.playerCount === 2) return 'HEADS-UP';
+  return game.playerCount + '-HANDED';
+}
 
 // derived: get (row, col) for the strategy lookup
 function handRowCol() {
@@ -871,11 +968,46 @@ function showScreen(name) {
   document.getElementById('nav').style.display = showNav ? 'flex' : 'none';
   document.getElementById('back-btn').style.display    = (name === 'result') ? 'none' : 'inline-block';
   document.getElementById('restart-btn').style.display = 'none'; // replaced by result-restart button
+
+  // Footer info: show player-count label on non-position screens
+  const navInfo = document.getElementById('nav-info');
+  if (navInfo) {
+    navInfo.textContent = (showNav && name !== 'position') ? playerCountLabel() : '';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
 //  POSITION SCREEN
 // ─────────────────────────────────────────────────────────────
+
+// Sync the position grid + subtitle + toggle pills to current playerCount.
+// Disables (greys out) position cards that don't exist at this count.
+function syncPlayerCount() {
+  const active = activePositions();
+  document.querySelectorAll('.pos-btn').forEach(btn => {
+    if (active.includes(btn.dataset.pos)) btn.classList.remove('disabled');
+    else                                   btn.classList.add('disabled');
+  });
+  document.querySelectorAll('.player-pill').forEach(pill => {
+    if (parseInt(pill.dataset.count, 10) === game.playerCount) pill.classList.add('active');
+    else                                                        pill.classList.remove('active');
+  });
+  const sub = document.getElementById('position-sub');
+  if (sub) {
+    if (game.playerCount === 2)      sub.textContent = "Heads-up. Pick where you're sitting.";
+    else if (game.playerCount === 3) sub.textContent = "3-handed. Pick where you're sitting.";
+    else                              sub.textContent = "4-handed. Pick where you're sitting.";
+  }
+}
+
+// Player-count toggle clicks
+document.querySelectorAll('.player-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    game.playerCount = parseInt(pill.dataset.count, 10);
+    syncPlayerCount();
+  });
+});
+
 document.querySelectorAll('.pos-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     game.position = btn.dataset.pos;
@@ -891,7 +1023,7 @@ document.querySelectorAll('.pos-btn').forEach(btn => {
 //  ACTION SCREEN
 // ─────────────────────────────────────────────────────────────
 function buildActionScreen() {
-  const players = PRIOR_PLAYERS[game.position];
+  const players = priorPlayers(game.position);
   const container = document.getElementById('actions');
   container.innerHTML = '';
 
@@ -1001,7 +1133,7 @@ document.querySelectorAll('.suit-btn').forEach(btn => {
 });
 
 function goToActionOrResult() {
-  if (PRIOR_PLAYERS[game.position].length === 0) {
+  if (priorPlayers(game.position).length === 0) {
     // UTG: no action history, jump straight to result
     computeAndShowResult();
   } else {
@@ -1053,14 +1185,14 @@ function buildChartGrid() {
   const heroR = rc ? rc[0] : -1;
   const heroC = rc ? rc[1] : -1;
 
-  const stateKey = game.position + '|' + game.history.join('');
+  const stateKey = buildStateKey();
   const stateIdx = STATE_INDEX[stateKey];
 
   // Title: explain what the chart shows
   const title = document.getElementById('chart-title');
   if (title) {
     const histPart = game.history.length === 0 ? 'first to act' :
-      'after ' + PRIOR_PLAYERS[game.position]
+      'after ' + priorPlayers(game.position)
         .map((p, i) => p + (game.history[i] === 'J' ? (game.history.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
         .join(', ');
     title.textContent = `${game.position} strategy — ${histPart}`;
@@ -1137,8 +1269,13 @@ function showWalkResult() {
   const handStr = (game.handHigh !== null && game.handLow !== null)
     ? handLabel(...handRowCol())
     : '';
-  document.getElementById('context-line').innerHTML =
-    'BB · UTG folds · BTN folds · SB folds' + (handStr ? ' · <span class="hand">' + handStr + '</span>' : '');
+  // Build walk context line: "BB · UTG folds · BTN folds · SB folds · 22"
+  // For 3-handed/HU there are fewer (or no) prior players.
+  const priorFolds = priorPlayers('BB').map(p => p + ' folds').join(' · ');
+  const walkCtx = priorFolds
+    ? 'BB · ' + priorFolds + (handStr ? ' · <span class="hand">' + handStr + '</span>' : '')
+    : 'BB · uncontested' + (handStr ? ' · <span class="hand">' + handStr + '</span>' : '');
+  document.getElementById('context-line').innerHTML = walkCtx;
 
   // Hide reroll + chart toggle for walks
   document.getElementById('reroll').style.display       = 'none';
@@ -1150,10 +1287,8 @@ function showWalkResult() {
 }
 
 function computeAndShowResult() {
-  const stateKey = game.position + '|' + game.history.join('');
-
-  // Special case: BB and everyone folded → walk (BB wins the blinds, no decision)
-  if (stateKey === 'BB|FFF') {
+  // Walk detection: hero=BB with all-folds history, regardless of player count.
+  if (isWalk()) {
     showWalkResult();
     return;
   }
@@ -1164,6 +1299,7 @@ function computeAndShowResult() {
   document.getElementById('result-restart').style.display = '';
   document.getElementById('chart-toggle').style.display   = '';
 
+  const stateKey = buildStateKey();
   const stateIdx = STATE_INDEX[stateKey];
   if (stateIdx === undefined) {
     document.getElementById('error-detail').textContent = 'No state for ' + stateKey;
@@ -1184,7 +1320,7 @@ function computeAndShowResult() {
   // populate result UI
   const handStr = handLabel(rc[0], rc[1]);
   const histStr = game.history.length
-    ? PRIOR_PLAYERS[game.position]
+    ? priorPlayers(game.position)
         .map((p, i) => p + (game.history[i] === 'J' ? (game.history.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
         .join(' · ')
     : 'first to act';
@@ -1244,18 +1380,30 @@ document.getElementById('back-btn').addEventListener('click', () => {
 });
 
 function restart() {
+  // Soft reset — preserves playerCount setting
   game.position = null; game.history = [];
   game.handHigh = null; game.handLow = null; game.handSuit = null;
   document.getElementById('chart-view').classList.remove('show');
+  syncPlayerCount();   // re-render pos grid greyed-out state for the kept count
   showScreen('position');
 }
+
+function fullReset() {
+  // Hard reset — also clears playerCount (logo tap = fresh start)
+  game.playerCount = 4;
+  restart();
+}
+
 document.getElementById('result-restart').addEventListener('click', restart);
 document.getElementById('restart-btn').addEventListener('click', restart);
 document.getElementById('brand-home').addEventListener('click', () => {
-  // Only restart if we're past the position screen — avoids a useless click on the home page
+  // Logo tap = hard reset (clears playerCount too) — like a page refresh
   const cur = document.querySelector('.screen.active');
   if (cur && cur.id !== 'screen-position' && cur.id !== 'screen-loading') {
-    restart();
+    fullReset();
+  } else if (cur && cur.id === 'screen-position') {
+    // Already on position; still useful to reset the toggle
+    fullReset();
   }
 });
 
@@ -1272,6 +1420,7 @@ document.getElementById('chart-toggle').addEventListener('click', () => {
 //  BOOT
 // ─────────────────────────────────────────────────────────────
 (async function() {
+  syncPlayerCount();
   const ok = await loadStrategy();
   if (ok) showScreen('position');
 })();
