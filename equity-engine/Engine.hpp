@@ -6,7 +6,7 @@
 
 constexpr int    NUM_TRIALS_2WAY = 1'000'000; // 1'000'000 when not testing
 constexpr int    NUM_TRIALS_3WAY = 200'000; // 500'000 when not testing
-constexpr int    NUM_TRIALS_4WAY = 10'000; // 50'000 when not testing - unused
+constexpr int    NUM_TRIALS_4WAY = 10'000; // 50'000 when not testing
 
 constexpr double EQUITY_SCALE    = 65535.0;
 

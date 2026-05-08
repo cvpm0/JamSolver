@@ -463,15 +463,18 @@
 
   /* ───────── suit picker ───────── */
   .suit-choice {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.85rem;
   }
   .suit-btn {
+    aspect-ratio: 0.85;            /* taller than wide, like a playing card */
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    padding: 1.4rem 1.6rem;
+    gap: 1.25rem;
+    padding: 1.5rem 1rem;
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--bg-2);
@@ -479,20 +482,20 @@
     -webkit-tap-highlight-color: transparent;
   }
   .suit-btn:active {
-    transform: scale(0.98);
+    transform: scale(0.97);
     border-color: var(--accent);
   }
   .suit-label {
     font-family: var(--serif);
-    font-size: 1.8rem;
+    font-size: 1.7rem;
     font-weight: 300;
     letter-spacing: -0.01em;
     color: var(--ink);
   }
   .suit-cards {
     display: flex;
-    gap: 0.4rem;
-    font-size: 2rem;
+    gap: 0.5rem;
+    font-size: 3rem;
     line-height: 1;
   }
   .suit-cards .card.heart   { color: var(--jam); }
@@ -1059,6 +1062,7 @@ const game = {
   playerCount: 4,        // 2, 3, or 4 — defaults to 4-max
   smartSkip: false,      // if true, skip action screen when all reachable states pure-jam/fold
   accelerated: false,    // set true in computeAndShowResult when smart-skip activated for current result
+  skippedFrom: null,     // screen name ('hand1'|'hand2'|'hand3'|'action') where skip fired — used for back-nav
 };
 
 // Active positions for current player count, in seating order
@@ -1378,6 +1382,7 @@ function buildActionScreen() {
         // the answer, skip them and go straight to the verdict.
         const accel = checkAcceleration();
         if (accel) {
+          game.skippedFrom = 'action';
           setTimeout(() => showAcceleratedResult(accel), 220);
         }
       });
@@ -1400,7 +1405,7 @@ function goToHand1() {
     game.handSuit = null;
     // Check if even just the high rank determines the answer (rare but possible)
     const accel = checkAcceleration();
-    if (accel) { showAcceleratedResult(accel); return; }
+    if (accel) { game.skippedFrom = 'hand1'; showAcceleratedResult(accel); return; }
     goToHand2();
   }});
   showScreen('hand1');
@@ -1415,14 +1420,14 @@ function goToHand2() {
     if (r === game.handHigh) {
       // pair → no suit step, go straight to action history
       game.handSuit = null;
-      goToActionOrResult();
+      goToActionOrResult('hand2');
       return;
     }
     // Non-pair: check if the answer is the same for both suited and offsuit
     // across all reachable states. If yes, skip the suit picker.
     game.handSuit = null;
     const accel = checkAcceleration();
-    if (accel) { showAcceleratedResult(accel); return; }
+    if (accel) { game.skippedFrom = 'hand2'; showAcceleratedResult(accel); return; }
     goToHand3();
   }, highlightHigh: game.handHigh });
   // dynamic subtext
@@ -1442,11 +1447,11 @@ function goToHand3() {
 document.querySelectorAll('.suit-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     game.handSuit = btn.dataset.suit;  // 's' or 'o'
-    goToActionOrResult();
+    goToActionOrResult('hand3');
   });
 });
 
-function goToActionOrResult() {
+function goToActionOrResult(fromScreen) {
   if (priorPlayers(game.position).length === 0) {
     // UTG: no action history, jump straight to result
     computeAndShowResult();
@@ -1456,6 +1461,7 @@ function goToActionOrResult() {
   // bypass the action screen and show an accelerated verdict.
   const accel = checkAcceleration();
   if (accel) {
+    game.skippedFrom = fromScreen || 'hand3';
     showAcceleratedResult(accel);
     return;
   }
@@ -1687,6 +1693,7 @@ function showWalkResult() {
 
 function computeAndShowResult() {
   game.accelerated = false;
+  game.skippedFrom = null;
 
   // Walk detection: hero=BB with all-folds history, regardless of player count.
   if (isWalk()) {
@@ -1765,35 +1772,17 @@ document.getElementById('back-btn').addEventListener('click', () => {
   const cur = document.querySelector('.screen.active').id.replace('screen-', '');
   switch (cur) {
     case 'result':
-      // Back from result navigation:
-      //  - If accelerated, return to the next step the user would have seen
-      //    if Smart Skip hadn't fired:
-      //      * if action history was being entered → action screen (preserves entries)
-      //      * else if suit was skipped (low rank set, no suit) → hand3
-      //      * else if low rank was skipped (high set, no low) → hand2
-      //      * else if hand fully spec'd → action screen if priors exist, else hand picker
+      // Back from result:
+      //  - If accelerated, return to the exact screen the user was on when
+      //    Smart Skip fired. game.skippedFrom records this.
       //  - If normal result and there were prior players → action screen
-      //  - Else → hand picker
-      if (game.accelerated) {
-        if (game.history.length > 0 && game.history.length < priorPlayers(game.position).length) {
-          // Mid-action-history skip — return to action screen, partial entries preserved
-          buildActionScreen();
-          showScreen('action');
-        } else if (game.handHigh !== null && game.handLow !== null && game.handHigh !== game.handLow && game.handSuit === null) {
-          // Suit-skip — return to suit picker
-          goToHand3();
-        } else if (game.handHigh !== null && game.handLow === null) {
-          // Low-rank skip (rare) — return to low rank picker
-          goToHand2();
-        } else if (priorPlayers(game.position).length > 0) {
-          // Hand fully specified, action fully skipped — return to action screen
-          buildActionScreen();
-          showScreen('action');
-        } else if (game.handHigh === game.handLow) {
-          goToHand2();
-        } else {
-          goToHand3();
-        }
+      //  - Else → hand picker (suit if non-pair, low-rank if pair)
+      if (game.accelerated && game.skippedFrom) {
+        if      (game.skippedFrom === 'hand1')  showScreen('hand1');
+        else if (game.skippedFrom === 'hand2')  goToHand2();
+        else if (game.skippedFrom === 'hand3')  goToHand3();
+        else if (game.skippedFrom === 'action') { buildActionScreen(); showScreen('action'); }
+        else                                    showScreen('position'); // fallback
       } else if (priorPlayers(game.position).length > 0) {
         buildActionScreen();
         showScreen('action');
@@ -1825,6 +1814,7 @@ function restart() {
   // Soft reset — preserves playerCount setting
   game.position = null; game.history = [];
   game.handHigh = null; game.handLow = null; game.handSuit = null;
+  game.accelerated = false; game.skippedFrom = null;
   document.getElementById('chart-view').classList.remove('show');
   syncPlayerCount();   // re-render pos grid greyed-out state for the kept count
   showScreen('position');
