@@ -15,13 +15,7 @@ constexpr int    NUM_ITERATIONS = 100'000;
 constexpr double STACK          = 8.0;
 constexpr double SB_BLIND       = 0.5;
 constexpr double BB_BLIND       = 1.0;
-
-// 4-way pots are approximated as 3-way pots scaled by this factor.
-// Adding a 4th tight opponent reduces hero's win probability. When all three
-// villains jam (rare), ranges are tight (~5-10% each) and equities cluster
-// more — 0.80 is more accurate than 0.85 in this regime. Tune empirically
-// against ground-truth 4-way equity if needed.
-constexpr double FOUR_WAY_FACTOR = 0.80;
+constexpr double RAKE           = 0.22;  // flat fee per hand, deducted from pot
 
 enum State : uint8_t {
     UTG    = 0,
@@ -43,6 +37,7 @@ inline double regret_fold[NUM_STATES][NUM_HANDS];
 // Filled once per iteration after strategy update; EV functions just read.
 inline double eq_vs_one[NUM_STATES][NUM_HANDS];
 inline double eq_vs_two[NUM_STATES][NUM_STATES][NUM_HANDS];
+inline double eq_vs_three[NUM_STATES][NUM_STATES][NUM_STATES][NUM_HANDS];
 
 // EV when hero folds, indexed by state (= what hero has already posted, negated)
 constexpr double FOLD_EV[NUM_STATES] = {
@@ -63,7 +58,6 @@ double combo_weight(int h) {
 // At showdown nodes, we read eq_vs_one[vs][h] or eq_vs_two[vs1][vs2][h] —
 // hero's per-hand equity vs villain(s)' weighted jam range. The cache makes
 // this O(1) instead of summing 169^N villain combos per EV call.
-// 4-way pots are approximated as 3-way × FOUR_WAY_FACTOR (rare states anyway).
 
 // ── declarations ─────────────────────────────────────────────────────────────
 
@@ -204,101 +198,143 @@ void fill_eq_vs_two() {
     }
 }
 
+// Helper: fill eq_vs_three[vs1][vs2][vs3] for one specific triple.
+// Triple-nested compacted loop: n1 × n2 × n3 × 169 hero hands.
+// After convergence, n1/n2/n3 are typically 5-30, so the inner work
+// is roughly 25³ × 169 ≈ 2.6M ops per triple — fast.
+static void fill_eq_vs_three_triple(State vs1, State vs2, State vs3) {
+    double w1[NUM_HANDS], w2[NUM_HANDS], w3[NUM_HANDS];
+    int    idx1[NUM_HANDS], idx2[NUM_HANDS], idx3[NUM_HANDS];
+    int    n1 = 0, n2 = 0, n3 = 0;
+    double sum1 = 0.0, sum2 = 0.0, sum3 = 0.0;
+
+    for (int v = 0; v < NUM_HANDS; ++v) {
+        double a = combo_weight(v) * strategy[vs1][v];
+        double b = combo_weight(v) * strategy[vs2][v];
+        double c = combo_weight(v) * strategy[vs3][v];
+        w1[v] = a; w2[v] = b; w3[v] = c;
+        if (a > 0.0) { idx1[n1++] = v; sum1 += a; }
+        if (b > 0.0) { idx2[n2++] = v; sum2 += b; }
+        if (c > 0.0) { idx3[n3++] = v; sum3 += c; }
+    }
+    double denom = sum1 * sum2 * sum3;
+    if (denom < 1e-9) {
+        for (int h = 0; h < NUM_HANDS; ++h) eq_vs_three[vs1][vs2][vs3][h] = 0.25;
+        return;
+    }
+    double inv_denom = 1.0 / denom;
+
+    for (int h = 0; h < NUM_HANDS; ++h) {
+        double num = 0.0;
+        for (int i = 0; i < n1; ++i) {
+            int    v1 = idx1[i];
+            double wa = w1[v1];
+            for (int j = 0; j < n2; ++j) {
+                int    v2 = idx2[j];
+                double wb = wa * w2[v2];
+                for (int k = 0; k < n3; ++k) {
+                    int v3 = idx3[k];
+                    num += wb * w3[v3] * get_equity_4way(h, v1, v2, v3, 0);
+                }
+            }
+        }
+        eq_vs_three[vs1][vs2][vs3][h] = num * inv_denom;
+    }
+}
+
+// ── eq_vs_three: only fill the 4 triples that EV functions actually use.
+// Parallelised across triples — each writes to a disjoint slice.
+void fill_eq_vs_three() {
+    static constexpr int TRIPLES[][3] = {
+        {UTG,   BTN_J,  SB_JJ},   // BB_JJJ: hero vs all three jammers
+        {UTG,   BTN_J,  BB_JJJ},  // SB_JJ BB-calls: hero vs UTG+BTN+BB
+        {UTG,   SB_JJ,  BB_JJJ},  // BTN_J SB+BB call: hero vs UTG+SB+BB
+        {BTN_J, SB_JJ,  BB_JJJ},  // UTG all call: hero vs BTN+SB+BB
+    };
+    constexpr int N_TRIPLES = sizeof(TRIPLES) / sizeof(TRIPLES[0]);
+
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < N_TRIPLES; ++i) {
+        fill_eq_vs_three_triple(static_cast<State>(TRIPLES[i][0]),
+                                static_cast<State>(TRIPLES[i][1]),
+                                static_cast<State>(TRIPLES[i][2]));
+    }
+}
+
 void fill_equity_cache() {
     fill_eq_vs_one();
     fill_eq_vs_two();
+    fill_eq_vs_three();
 }
 
 // ── BB nodes: action closes after BB's decision ─────────────────────────────
 double ev_jam_bb(State s, int h) {
     switch (s) {
-        // SB jammed alone, hero (BB) calls → HU vs SB. Pot = 8+8 = 16
         case BB_FFJ:
-            return eq_vs_one[SB_FF][h] * 16.0 - STACK;
+            return eq_vs_one[SB_FF][h] * (16.0 - RAKE) - STACK;
 
-        // BTN jammed, SB folded (0.5 dead), hero calls → HU vs BTN. Pot = 16.5
         case BB_FJF:
-            return eq_vs_one[BTN_F][h] * 16.5 - STACK;
+            return eq_vs_one[BTN_F][h] * (16.5 - RAKE) - STACK;
 
-        // BTN jammed, SB called, hero calls → 3-way. Pot = 24
         case BB_FJJ:
-            return eq_vs_two[BTN_F][SB_FJ][h] * 24.0 - STACK;
+            return eq_vs_two[BTN_F][SB_FJ][h] * (24.0 - RAKE) - STACK;
 
-        // UTG jammed, BTN+SB folded (0.5 dead), hero calls → HU vs UTG. Pot = 16.5
         case BB_JFF:
-            return eq_vs_one[UTG][h] * 16.5 - STACK;
+            return eq_vs_one[UTG][h] * (16.5 - RAKE) - STACK;
 
-        // UTG jammed, BTN folded, SB called, hero calls → 3-way. Pot = 24
         case BB_JFJ:
-            return eq_vs_two[UTG][SB_JF][h] * 24.0 - STACK;
+            return eq_vs_two[UTG][SB_JF][h] * (24.0 - RAKE) - STACK;
 
-        // UTG+BTN jammed, SB folded (0.5 dead), hero calls → 3-way. Pot = 24.5
         case BB_JJF:
-            return eq_vs_two[UTG][BTN_J][h] * 24.5 - STACK;
+            return eq_vs_two[UTG][BTN_J][h] * (24.5 - RAKE) - STACK;
 
-        // All three jammed, hero calls → 4-way. Pot = 32
-        // Approximate 4-way as 3-way (UTG, BTN_J) × FOUR_WAY_FACTOR.
         case BB_JJJ:
-            return eq_vs_two[UTG][BTN_J][h] * FOUR_WAY_FACTOR * 32.0 - STACK;
+            return eq_vs_three[UTG][BTN_J][SB_JJ][h] * (32.0 - RAKE) - STACK;
 
         default:
-            return 0.0; // unreachable
+            return 0.0;
     }
 }
 
 // ── SB nodes: BB still to act ───────────────────────────────────────────────
 double ev_jam_sb(State s, int h) {
     switch (s) {
-        // Hero (SB) jams uncontested. BB responds from BB_FFJ.
-        // BB folds: SB wins blinds. Pot uncalled = 8 + 1 = 9.
-        // BB calls: HU vs BB. Pot = 16.
         case SB_FF: {
             double pc = p_jam(BB_FFJ);
             double pf = 1.0 - pc;
-            return pf * (9.0 - STACK)
-                 + pc * (eq_vs_one[BB_FFJ][h] * 16.0 - STACK);
+            return pf * ((9.0 - RAKE) - STACK)
+                 + pc * (eq_vs_one[BB_FFJ][h] * (16.0 - RAKE) - STACK);
         }
 
-        // BTN jammed, hero calls. BB responds from BB_FJJ.
-        // BB folds: HU vs BTN, BB blind dead. Pot = 8+8+1 = 17.
-        // BB calls: 3-way. Pot = 24.
         case SB_FJ: {
             double pc = p_jam(BB_FJJ);
             double pf = 1.0 - pc;
-            return pf * (eq_vs_one[BTN_F][h] * 17.0 - STACK)
-                 + pc * (eq_vs_two[BTN_F][BB_FJJ][h] * 24.0 - STACK);
+            return pf * (eq_vs_one[BTN_F][h] * (17.0 - RAKE) - STACK)
+                 + pc * (eq_vs_two[BTN_F][BB_FJJ][h] * (24.0 - RAKE) - STACK);
         }
 
-        // UTG jammed, BTN folded, hero calls. BB responds from BB_JFJ.
-        // BB folds: HU vs UTG, BB blind dead. Pot = 17.
-        // BB calls: 3-way. Pot = 24.
         case SB_JF: {
             double pc = p_jam(BB_JFJ);
             double pf = 1.0 - pc;
-            return pf * (eq_vs_one[UTG][h] * 17.0 - STACK)
-                 + pc * (eq_vs_two[UTG][BB_JFJ][h] * 24.0 - STACK);
+            return pf * (eq_vs_one[UTG][h] * (17.0 - RAKE) - STACK)
+                 + pc * (eq_vs_two[UTG][BB_JFJ][h] * (24.0 - RAKE) - STACK);
         }
 
-        // UTG+BTN jammed, hero calls. BB responds from BB_JJJ.
-        // BB folds: 3-way vs UTG+BTN, BB blind dead. Pot = 25.
-        // BB calls: 4-way. Pot = 32. Approximate as 3-way × FOUR_WAY_FACTOR.
         case SB_JJ: {
             double pc = p_jam(BB_JJJ);
             double pf = 1.0 - pc;
-            return pf * (eq_vs_two[UTG][BTN_J][h] * 25.0 - STACK)
-                 + pc * (eq_vs_two[UTG][BTN_J][h] * FOUR_WAY_FACTOR * 32.0 - STACK);
+            return pf * (eq_vs_two[UTG][BTN_J][h] * (25.0 - RAKE) - STACK)
+                 + pc * (eq_vs_three[UTG][BTN_J][BB_JJJ][h] * (32.0 - RAKE) - STACK);
         }
 
         default:
-            return 0.0; // unreachable
+            return 0.0;
     }
 }
 
 // ── BTN nodes: SB and BB still to act ───────────────────────────────────────
 double ev_jam_btn(State s, int h) {
     switch (s) {
-        // UTG folded, hero (BTN) jams.
-        // SB responds from SB_FJ; BB from BB_FJF (SB folded) or BB_FJJ (SB called).
         case BTN_F: {
             double ps  = p_jam(SB_FJ);
             double pfs = 1.0 - ps;
@@ -306,19 +342,13 @@ double ev_jam_btn(State s, int h) {
             double pb_sb    = p_jam(BB_FJJ);
 
             double ev = 0.0;
-            // SB fold, BB fold: BTN wins. Pot uncalled = 8+0.5+1 = 9.5
-            ev += pfs * (1.0 - pb_no_sb) * (9.5 - STACK);
-            // SB fold, BB call: HU vs BB, 0.5 dead. Pot = 16.5
-            ev += pfs * pb_no_sb         * (eq_vs_one[BB_FJF][h] * 16.5 - STACK);
-            // SB call, BB fold: HU vs SB, 1 dead. Pot = 17
-            ev += ps  * (1.0 - pb_sb)    * (eq_vs_one[SB_FJ][h]  * 17.0 - STACK);
-            // SB call, BB call: 3-way. Pot = 24
-            ev += ps  * pb_sb            * (eq_vs_two[SB_FJ][BB_FJJ][h] * 24.0 - STACK);
+            ev += pfs * (1.0 - pb_no_sb) * ((9.5 - RAKE) - STACK);
+            ev += pfs * pb_no_sb         * (eq_vs_one[BB_FJF][h] * (16.5 - RAKE) - STACK);
+            ev += ps  * (1.0 - pb_sb)    * (eq_vs_one[SB_FJ][h]  * (17.0 - RAKE) - STACK);
+            ev += ps  * pb_sb            * (eq_vs_two[SB_FJ][BB_FJJ][h] * (24.0 - RAKE) - STACK);
             return ev;
         }
 
-        // UTG jammed, hero (BTN) calls.
-        // SB responds from SB_JJ; BB from BB_JJF (SB folded) or BB_JJJ (SB called).
         case BTN_J: {
             double ps  = p_jam(SB_JJ);
             double pfs = 1.0 - ps;
@@ -326,19 +356,15 @@ double ev_jam_btn(State s, int h) {
             double pb_sb    = p_jam(BB_JJJ);
 
             double ev = 0.0;
-            // SB fold, BB fold: HU vs UTG, 0.5+1 dead. Pot = 17.5
-            ev += pfs * (1.0 - pb_no_sb) * (eq_vs_one[UTG][h] * 17.5 - STACK);
-            // SB fold, BB call: 3-way vs UTG+BB, 0.5 dead. Pot = 24.5
-            ev += pfs * pb_no_sb         * (eq_vs_two[UTG][BB_JJF][h] * 24.5 - STACK);
-            // SB call, BB fold: 3-way vs UTG+SB, 1 dead. Pot = 25
-            ev += ps  * (1.0 - pb_sb)    * (eq_vs_two[UTG][SB_JJ][h]  * 25.0 - STACK);
-            // SB call, BB call: 4-way. Pot = 32. Approximate as (UTG, SB_JJ) 3-way × factor.
-            ev += ps  * pb_sb            * (eq_vs_two[UTG][SB_JJ][h] * FOUR_WAY_FACTOR * 32.0 - STACK);
+            ev += pfs * (1.0 - pb_no_sb) * (eq_vs_one[UTG][h] * (17.5 - RAKE) - STACK);
+            ev += pfs * pb_no_sb         * (eq_vs_two[UTG][BB_JJF][h] * (24.5 - RAKE) - STACK);
+            ev += ps  * (1.0 - pb_sb)    * (eq_vs_two[UTG][SB_JJ][h]  * (25.0 - RAKE) - STACK);
+            ev += ps  * pb_sb            * (eq_vs_three[UTG][SB_JJ][BB_JJJ][h] * (32.0 - RAKE) - STACK);
             return ev;
         }
 
         default:
-            return 0.0; // unreachable
+            return 0.0;
     }
 }
 
@@ -346,45 +372,37 @@ double ev_jam_btn(State s, int h) {
 double ev_jam_utg(int h) {
     double pb        = p_jam(BTN_J);
     double pfb       = 1.0 - pb;
-    double ps_no_btn = p_jam(SB_JF);   // SB's state when BTN folded
-    double ps_btn    = p_jam(SB_JJ);   // SB's state when BTN called
-    double pbb_ff    = p_jam(BB_JFF);  // BTN fold, SB fold
-    double pbb_fc    = p_jam(BB_JFJ);  // BTN fold, SB call
-    double pbb_cf    = p_jam(BB_JJF);  // BTN call, SB fold
-    double pbb_cc    = p_jam(BB_JJJ);  // BTN call, SB call
+    double ps_no_btn = p_jam(SB_JF);
+    double ps_btn    = p_jam(SB_JJ);
+    double pbb_ff    = p_jam(BB_JFF);
+    double pbb_fc    = p_jam(BB_JFJ);
+    double pbb_cf    = p_jam(BB_JJF);
+    double pbb_cc    = p_jam(BB_JJJ);
 
     double ev = 0.0;
 
-    // BTN fold, SB fold, BB fold: UTG wins. Pot uncalled = 9.5
-    ev += pfb * (1.0 - ps_no_btn) * (1.0 - pbb_ff) * (9.5 - STACK);
+    ev += pfb * (1.0 - ps_no_btn) * (1.0 - pbb_ff) * ((9.5 - RAKE) - STACK);
 
-    // BTN fold, SB fold, BB call: HU vs BB, 0.5 dead. Pot = 16.5
     ev += pfb * (1.0 - ps_no_btn) * pbb_ff
-        * (eq_vs_one[BB_JFF][h] * 16.5 - STACK);
+        * (eq_vs_one[BB_JFF][h] * (16.5 - RAKE) - STACK);
 
-    // BTN fold, SB call, BB fold: HU vs SB, 1 dead. Pot = 17
     ev += pfb * ps_no_btn * (1.0 - pbb_fc)
-        * (eq_vs_one[SB_JF][h] * 17.0 - STACK);
+        * (eq_vs_one[SB_JF][h] * (17.0 - RAKE) - STACK);
 
-    // BTN fold, SB call, BB call: 3-way vs SB, BB. Pot = 24
     ev += pfb * ps_no_btn * pbb_fc
-        * (eq_vs_two[SB_JF][BB_JFJ][h] * 24.0 - STACK);
+        * (eq_vs_two[SB_JF][BB_JFJ][h] * (24.0 - RAKE) - STACK);
 
-    // BTN call, SB fold, BB fold: HU vs BTN, 0.5+1 dead. Pot = 17.5
     ev += pb * (1.0 - ps_btn) * (1.0 - pbb_cf)
-        * (eq_vs_one[BTN_J][h] * 17.5 - STACK);
+        * (eq_vs_one[BTN_J][h] * (17.5 - RAKE) - STACK);
 
-    // BTN call, SB fold, BB call: 3-way vs BTN, BB, 0.5 dead. Pot = 24.5
     ev += pb * (1.0 - ps_btn) * pbb_cf
-        * (eq_vs_two[BTN_J][BB_JJF][h] * 24.5 - STACK);
+        * (eq_vs_two[BTN_J][BB_JJF][h] * (24.5 - RAKE) - STACK);
 
-    // BTN call, SB call, BB fold: 3-way vs BTN, SB, 1 dead. Pot = 25
     ev += pb * ps_btn * (1.0 - pbb_cc)
-        * (eq_vs_two[BTN_J][SB_JJ][h] * 25.0 - STACK);
+        * (eq_vs_two[BTN_J][SB_JJ][h] * (25.0 - RAKE) - STACK);
 
-    // BTN call, SB call, BB call: 4-way. Pot = 32. Approximate as (BTN_J, SB_JJ) × factor.
     ev += pb * ps_btn * pbb_cc
-        * (eq_vs_two[BTN_J][SB_JJ][h] * FOUR_WAY_FACTOR * 32.0 - STACK);
+        * (eq_vs_three[BTN_J][SB_JJ][BB_JJJ][h] * (32.0 - RAKE) - STACK);
 
     return ev;
 }

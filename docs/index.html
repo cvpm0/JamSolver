@@ -237,6 +237,154 @@
     letter-spacing: 0.14em;
   }
 
+  /* ───────── smart skip toggle + info button ───────── */
+  .smart-skip-row {
+    margin-top: 1.25rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .smart-skip-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.5rem 0.85rem 0.5rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 100px;
+    background: var(--bg-2);
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .smart-skip-toggle:active { transform: scale(0.97); }
+  .smart-skip-toggle .track {
+    width: 36px;
+    height: 20px;
+    border-radius: 100px;
+    background: var(--bg-3);
+    border: 1px solid var(--line);
+    position: relative;
+    transition: background 0.18s, border-color 0.18s;
+    flex-shrink: 0;
+  }
+  .smart-skip-toggle .thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--ink-mute);
+    transition: transform 0.18s, background 0.18s;
+  }
+  .smart-skip-toggle[aria-checked="true"] .track {
+    background: rgba(217, 119, 87, 0.2);
+    border-color: var(--accent);
+  }
+  .smart-skip-toggle[aria-checked="true"] .thumb {
+    transform: translateX(16px);
+    background: var(--accent);
+  }
+  .smart-skip-toggle .ss-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .smart-skip-toggle[aria-checked="true"] .ss-label {
+    color: var(--ink);
+  }
+  .info-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ink-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .info-btn:active { color: var(--accent); transform: scale(0.92); }
+  .info-btn svg { width: 16px; height: 16px; }
+
+  /* ───────── modal ───────── */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1.5rem;
+    animation: fadeIn 0.2s ease;
+  }
+  .modal-backdrop.show { display: flex; }
+  .modal-card {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 1.5rem 1.25rem 1.25rem;
+    max-width: 320px;
+    width: 100%;
+    position: relative;
+  }
+  .modal-close {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.75rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: var(--ink-mute);
+    font-size: 1.4rem;
+    line-height: 1;
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .modal-close:active { color: var(--accent); }
+  .modal-title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 1.25rem;
+    color: var(--ink);
+    margin-bottom: 0.6rem;
+  }
+  .modal-body {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--ink-mute);
+    margin-bottom: 0.5rem;
+  }
+  .modal-body:last-child { margin-bottom: 0; }
+  .modal-aside {
+    font-size: 0.75rem;
+    color: var(--ink-dim);
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--line);
+    margin-top: 0.75rem;
+  }
+  .zap-inline { color: var(--accent); }
+
+  /* ───────── accelerated badge on result screen ───────── */
+  .accel-line {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--accent) !important;
+    font-family: var(--mono);
+    font-size: 0.75rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+  .zap-icon { width: 14px; height: 14px; flex-shrink: 0; }
+  .accel-label { color: var(--accent); }
+
   /* ───────── action buttons ───────── */
   .actions {
     display: flex;
@@ -649,8 +797,8 @@
     <div class="pos-grid">
       <button class="pos-btn" data-pos="UTG"><span class="label">UTG</span><span class="desc">First to act</span></button>
       <button class="pos-btn" data-pos="BTN"><span class="label">BTN</span><span class="desc">Button</span></button>
-      <button class="pos-btn" data-pos="SB"><span class="label">SB</span><span class="desc">Small blind</span></button>
       <button class="pos-btn" data-pos="BB"><span class="label">BB</span><span class="desc">Big blind</span></button>
+      <button class="pos-btn" data-pos="SB"><span class="label">SB</span><span class="desc">Small blind</span></button>
     </div>
     <div class="player-toggle">
       <span class="label">Players</span>
@@ -659,6 +807,20 @@
         <button class="player-pill" data-count="3">3</button>
         <button class="player-pill active" data-count="4">4</button>
       </div>
+    </div>
+
+    <div class="smart-skip-row">
+      <button class="smart-skip-toggle" id="smart-skip-toggle" role="switch" aria-checked="false" aria-label="Toggle smart skip">
+        <span class="track"><span class="thumb"></span></span>
+        <span class="ss-label">Smart Skip</span>
+      </button>
+      <button class="info-btn" id="smart-skip-info" aria-label="What is Smart Skip?">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+      </button>
     </div>
   </section>
 
@@ -741,6 +903,20 @@
   <button class="nav-btn primary" id="restart-btn" style="display:none">Start over</button>
   <span class="nav-info" id="nav-info"></span>
 </nav>
+
+<!-- Info modal for Smart Skip explanation -->
+<div class="modal-backdrop" id="smart-skip-modal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-labelledby="ss-modal-title">
+    <button class="modal-close" id="smart-skip-close" aria-label="Close">×</button>
+    <h2 class="modal-title" id="ss-modal-title">Smart Skip</h2>
+    <p class="modal-body">
+      Some hands have the same answer regardless of what villains do — pocket aces always jam, junk always folds. When this is the case, Smart Skip jumps straight to the verdict and saves you a tap.
+    </p>
+    <p class="modal-body modal-aside">
+      The result screen shows a <span class="zap-inline">⚡</span> icon when this happens.
+    </p>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -881,6 +1057,8 @@ const game = {
   prob:     null,
   rolled:   null,        // 'JAM' or 'FOLD'
   playerCount: 4,        // 2, 3, or 4 — defaults to 4-max
+  smartSkip: false,      // if true, skip action screen when all reachable states pure-jam/fold
+  accelerated: false,    // set true in computeAndShowResult when smart-skip activated for current result
 };
 
 // Active positions for current player count, in seating order
@@ -921,6 +1099,102 @@ function isWalk() {
 function playerCountLabel() {
   if (game.playerCount === 2) return 'HEADS-UP';
   return game.playerCount + '-HANDED';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  SMART SKIP — detect when the answer is determined regardless
+//  of what's still unspecified (remaining hand cells × remaining
+//  action histories). Fires at every input step, not just at the end.
+// ─────────────────────────────────────────────────────────────
+
+// Enumerate the (row, col) hand cells consistent with what's been picked so far.
+// If nothing picked → all 169 cells.
+// If only high picked → all cells where one rank is handHigh.
+// If both ranks picked but no suit → both upper/lower triangle cells (suited + offsuit).
+// If pair (high == low) → just the diagonal cell.
+// If everything picked → just the one cell.
+function consistentHandCells() {
+  const cells = [];
+  if (game.handHigh === null) {
+    for (let r = 0; r < 13; r++) for (let c = 0; c < 13; c++) cells.push([r, c]);
+    return cells;
+  }
+  if (game.handLow === null) {
+    // High picked, low not. The high must appear at one of the cells.
+    // For pair: (h, h). For non-pair: low rank l > h gives suited (h, l) and offsuit (l, h).
+    const h = game.handHigh;
+    cells.push([h, h]); // pair
+    for (let l = h + 1; l < 13; l++) {  // l > h means rank index larger = lower-ranked card
+      cells.push([h, l]); // suited (upper triangle)
+      cells.push([l, h]); // offsuit (lower triangle)
+    }
+    return cells;
+  }
+  // Both ranks picked
+  if (game.handHigh === game.handLow) {
+    cells.push([game.handHigh, game.handHigh]);
+    return cells;
+  }
+  if (game.handSuit === null) {
+    // Both s and o for this rank pair
+    cells.push([game.handHigh, game.handLow]);  // suited
+    cells.push([game.handLow,  game.handHigh]); // offsuit
+    return cells;
+  }
+  // Fully specified
+  if (game.handSuit === 's') cells.push([game.handHigh, game.handLow]);
+  else                       cells.push([game.handLow,  game.handHigh]);
+  return cells;
+}
+
+// Enumerate state keys consistent with current history. The history is the
+// sequence of actions for ACTUAL prior players (not implicit folds).
+// Returns all keys that have current history as a prefix and lead to a
+// hero-decision state (i.e. are in STATE_INDEX). Walk paths are excluded.
+function consistentStateKeys() {
+  const prefix = implicitFoldPrefix();
+  const pos = game.position;
+  const n = priorPlayers(pos).length;
+  const fixed = game.history.join('');     // already-entered prior actions
+  const remaining = n - fixed.length;      // number of villain choices still unknown
+  if (remaining < 0) return [];
+
+  const keys = [];
+  for (let mask = 0; mask < (1 << remaining); mask++) {
+    let suffix = '';
+    for (let i = 0; i < remaining; i++) suffix += (mask & (1 << i)) ? 'J' : 'F';
+    const fullHistory = fixed + suffix;
+    // Skip walk path for BB (all folds)
+    if (pos === 'BB' && fullHistory.split('').every(c => c === 'F')) continue;
+    const key = pos + '|' + prefix + fullHistory;
+    if (STATE_INDEX[key] !== undefined) keys.push(key);
+  }
+  return keys;
+}
+
+// Returns 'JAM' or 'FOLD' if every remaining (cell × state) combination agrees,
+// otherwise null. Threshold: ≥ 0.95 jam everywhere or ≤ 0.05 fold everywhere.
+function checkAcceleration() {
+  if (!game.smartSkip) return null;
+  if (!game.position) return null;
+
+  const cells = consistentHandCells();
+  const keys  = consistentStateKeys();
+  if (cells.length === 0 || keys.length === 0) return null;
+
+  let allJam = true, allFold = true;
+  for (const [r, c] of cells) {
+    const hIdx = handIndex(r, c);
+    for (const key of keys) {
+      const sIdx = STATE_INDEX[key];
+      if (sIdx === undefined) return null;
+      const p = pJam(sIdx, hIdx);
+      if (p < 0.95) allJam = false;
+      if (p > 0.05) allFold = false;
+      if (!allJam && !allFold) return null;
+    }
+  }
+  return allJam ? 'JAM' : (allFold ? 'FOLD' : null);
 }
 
 // derived: get (row, col) for the strategy lookup
@@ -1010,6 +1284,27 @@ document.querySelectorAll('.player-pill').forEach(pill => {
   });
 });
 
+// Smart Skip toggle
+function syncSmartSkip() {
+  const t = document.getElementById('smart-skip-toggle');
+  if (t) t.setAttribute('aria-checked', game.smartSkip ? 'true' : 'false');
+}
+document.getElementById('smart-skip-toggle').addEventListener('click', () => {
+  game.smartSkip = !game.smartSkip;
+  syncSmartSkip();
+});
+
+// Info modal
+const ssModal = document.getElementById('smart-skip-modal');
+function openSmartSkipModal()  { ssModal.classList.add('show');    ssModal.setAttribute('aria-hidden', 'false'); }
+function closeSmartSkipModal() { ssModal.classList.remove('show'); ssModal.setAttribute('aria-hidden', 'true');  }
+document.getElementById('smart-skip-info').addEventListener('click', openSmartSkipModal);
+document.getElementById('smart-skip-close').addEventListener('click', closeSmartSkipModal);
+ssModal.addEventListener('click', (e) => {
+  // close when tapping backdrop (but not the card itself)
+  if (e.target === ssModal) closeSmartSkipModal();
+});
+
 document.querySelectorAll('.pos-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     game.position = btn.dataset.pos;
@@ -1017,6 +1312,8 @@ document.querySelectorAll('.pos-btn').forEach(btn => {
     game.handHigh = null;
     game.handLow  = null;
     game.handSuit = null;   // 's' | 'o' | null (null when pair)
+    // Note: we do NOT check acceleration here — at position-only stage,
+    // the answer can never be uniformly jam/fold across all 169 hands.
     goToHand1();
   });
 });
@@ -1075,12 +1372,19 @@ function buildActionScreen() {
         if (game.history.length === players.length) {
           // small delay so user sees their selection
           setTimeout(computeAndShowResult, 220);
+          return;
+        }
+        // Mid-action acceleration: if remaining villains' actions don't change
+        // the answer, skip them and go straight to the verdict.
+        const accel = checkAcceleration();
+        if (accel) {
+          setTimeout(() => showAcceleratedResult(accel), 220);
         }
       });
     });
 
-    buttons.appendChild(jamBtn);
     buttons.appendChild(foldBtn);
+    buttons.appendChild(jamBtn);
     row.appendChild(buttons);
     container.appendChild(row);
   });
@@ -1094,6 +1398,9 @@ function goToHand1() {
     game.handHigh = r;
     game.handLow  = null;
     game.handSuit = null;
+    // Check if even just the high rank determines the answer (rare but possible)
+    const accel = checkAcceleration();
+    if (accel) { showAcceleratedResult(accel); return; }
     goToHand2();
   }});
   showScreen('hand1');
@@ -1109,9 +1416,14 @@ function goToHand2() {
       // pair → no suit step, go straight to action history
       game.handSuit = null;
       goToActionOrResult();
-    } else {
-      goToHand3();
+      return;
     }
+    // Non-pair: check if the answer is the same for both suited and offsuit
+    // across all reachable states. If yes, skip the suit picker.
+    game.handSuit = null;
+    const accel = checkAcceleration();
+    if (accel) { showAcceleratedResult(accel); return; }
+    goToHand3();
   }, highlightHigh: game.handHigh });
   // dynamic subtext
   const hi = RANKS[game.handHigh];
@@ -1138,10 +1450,17 @@ function goToActionOrResult() {
   if (priorPlayers(game.position).length === 0) {
     // UTG: no action history, jump straight to result
     computeAndShowResult();
-  } else {
-    buildActionScreen();
-    showScreen('action');
+    return;
   }
+  // Smart Skip: if all reachable states for this (pos, hand) agree on jam or fold,
+  // bypass the action screen and show an accelerated verdict.
+  const accel = checkAcceleration();
+  if (accel) {
+    showAcceleratedResult(accel);
+    return;
+  }
+  buildActionScreen();
+  showScreen('action');
 }
 
 function buildRankPicker(containerId, opts) {
@@ -1258,11 +1577,90 @@ function goToHand() {
 // ─────────────────────────────────────────────────────────────
 //  RESULT SCREEN
 // ─────────────────────────────────────────────────────────────
+function showAcceleratedResult(verdictStr) {
+  // verdictStr is 'JAM' or 'FOLD'
+  game.accelerated = true;
+  game.prob = (verdictStr === 'JAM') ? 1.0 : 0.0;
+  game.rolled = verdictStr;
+
+  // Replace the "75% jam frequency" line with a zap icon + ACCELERATED label
+  const probLine = document.querySelector('.prob:first-child');
+  probLine.style.visibility = '';
+  probLine.classList.add('accel-line');
+  probLine.innerHTML =
+    '<svg class="zap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>' +
+    '</svg><span class="accel-label">accelerated</span>';
+
+  // Big verdict
+  const verdict = document.getElementById('verdict');
+  verdict.textContent = verdictStr.toLowerCase();
+  verdict.className = 'verdict ' + (verdictStr === 'JAM' ? 'jam' : 'fold');
+
+  // Detail text
+  document.getElementById('prob-detail').textContent =
+    (verdictStr === 'JAM') ? 'pure jam · all paths' : 'pure fold · all paths';
+
+  // Hand label — be honest about what was specified.
+  // - Nothing picked: "any hand" (shouldn't happen in practice)
+  // - Only high: "A·" with high rank
+  // - Both ranks but no suit (non-pair): "AK" (no suffix — suit irrelevant)
+  // - Pair: "AA" (suit n/a anyway)
+  // - Fully specified: "AKs" / "AKo"
+  let handStr;
+  if (game.handHigh === null) {
+    handStr = 'any hand';
+  } else if (game.handLow === null) {
+    handStr = RANKS[game.handHigh] + 'x';
+  } else if (game.handHigh === game.handLow) {
+    handStr = RANKS[game.handHigh] + RANKS[game.handHigh];
+  } else if (game.handSuit === null) {
+    handStr = RANKS[game.handHigh] + RANKS[game.handLow];   // no suit suffix
+  } else {
+    handStr = handLabel(...handRowCol());
+  }
+
+  // Action history — show what was actually entered. If priors remain
+  // unentered, we just don't list them (the ⚡ ACCELERATED label conveys
+  // "the rest didn't matter").
+  const priors = priorPlayers(game.position);
+  const entered = game.history;
+  let actionStr;
+  if (priors.length === 0) {
+    actionStr = 'first to act';
+  } else if (entered.length === 0) {
+    actionStr = 'any action';
+  } else {
+    // Build "UTG jams · BTN folds" style for the entered ones; remaining unstated
+    actionStr = entered
+      .map((a, i) => priors[i] + (a === 'J' ? (entered.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
+      .join(' · ');
+    if (entered.length < priors.length) {
+      actionStr += ' · …'; // ellipsis indicates we skipped the rest
+    }
+  }
+
+  document.getElementById('context-line').innerHTML =
+    game.position + ' · ' + actionStr + ' · <span class="hand">' + handStr + '</span>';
+
+  // Hide reroll (would always give same result) and chart toggle (no specific state)
+  document.getElementById('reroll').style.display       = 'none';
+  document.getElementById('chart-toggle').style.display = 'none';
+  document.getElementById('chart-view').classList.remove('show');
+
+  showScreen('result');
+}
+
 function showWalkResult() {
-  // Hide elements that don't apply to a walk
+  game.accelerated = false;
+
+  // Hide elements that don't apply to a walk; also reset accel-line if previously set
+  const probLine = document.querySelector('.prob:first-child');
+  probLine.classList.remove('accel-line');
+  probLine.innerHTML = '<span class="num" id="prob-pct">—</span> jam frequency';
   document.getElementById('prob-pct').textContent       = '—';
   document.getElementById('prob-detail').textContent    = 'no decision';
-  document.querySelector('.prob:first-child').style.visibility = 'hidden';
+  probLine.style.visibility = 'hidden';
 
   const verdict = document.getElementById('verdict');
   verdict.textContent = 'walk';
@@ -1288,14 +1686,19 @@ function showWalkResult() {
 }
 
 function computeAndShowResult() {
+  game.accelerated = false;
+
   // Walk detection: hero=BB with all-folds history, regardless of player count.
   if (isWalk()) {
     showWalkResult();
     return;
   }
 
-  // Reset things showWalkResult may have hidden
-  document.querySelector('.prob:first-child').style.visibility = '';
+  // Reset things that showWalkResult or showAcceleratedResult may have hidden/replaced
+  const probLine = document.querySelector('.prob:first-child');
+  probLine.style.visibility = '';
+  probLine.classList.remove('accel-line');
+  probLine.innerHTML = '<span class="num" id="prob-pct">—</span> jam frequency';
   document.getElementById('reroll').style.display         = '';
   document.getElementById('result-restart').style.display = '';
   document.getElementById('chart-toggle').style.display   = '';
@@ -1362,9 +1765,36 @@ document.getElementById('back-btn').addEventListener('click', () => {
   const cur = document.querySelector('.screen.active').id.replace('screen-', '');
   switch (cur) {
     case 'result':
-      // Back from result: go to action screen if there were prior players to ask about,
-      // otherwise go back into the hand picker (no action screen was shown)
-      if (priorPlayers(game.position).length > 0) {
+      // Back from result navigation:
+      //  - If accelerated, return to the next step the user would have seen
+      //    if Smart Skip hadn't fired:
+      //      * if action history was being entered → action screen (preserves entries)
+      //      * else if suit was skipped (low rank set, no suit) → hand3
+      //      * else if low rank was skipped (high set, no low) → hand2
+      //      * else if hand fully spec'd → action screen if priors exist, else hand picker
+      //  - If normal result and there were prior players → action screen
+      //  - Else → hand picker
+      if (game.accelerated) {
+        if (game.history.length > 0 && game.history.length < priorPlayers(game.position).length) {
+          // Mid-action-history skip — return to action screen, partial entries preserved
+          buildActionScreen();
+          showScreen('action');
+        } else if (game.handHigh !== null && game.handLow !== null && game.handHigh !== game.handLow && game.handSuit === null) {
+          // Suit-skip — return to suit picker
+          goToHand3();
+        } else if (game.handHigh !== null && game.handLow === null) {
+          // Low-rank skip (rare) — return to low rank picker
+          goToHand2();
+        } else if (priorPlayers(game.position).length > 0) {
+          // Hand fully specified, action fully skipped — return to action screen
+          buildActionScreen();
+          showScreen('action');
+        } else if (game.handHigh === game.handLow) {
+          goToHand2();
+        } else {
+          goToHand3();
+        }
+      } else if (priorPlayers(game.position).length > 0) {
         buildActionScreen();
         showScreen('action');
       } else if (game.handHigh === game.handLow) {
@@ -1401,8 +1831,10 @@ function restart() {
 }
 
 function fullReset() {
-  // Hard reset — also clears playerCount (logo tap = fresh start)
+  // Hard reset — also clears playerCount and smartSkip (logo tap = fresh start)
   game.playerCount = 4;
+  game.smartSkip = false;
+  syncSmartSkip();
   restart();
 }
 
@@ -1433,6 +1865,7 @@ document.getElementById('chart-toggle').addEventListener('click', () => {
 // ─────────────────────────────────────────────────────────────
 (async function() {
   syncPlayerCount();
+  syncSmartSkip();
   const ok = await loadStrategy();
   if (ok) showScreen('position');
 })();
