@@ -385,6 +385,54 @@
   .zap-icon { width: 14px; height: 14px; flex-shrink: 0; }
   .accel-label { color: var(--accent); }
 
+  /* ───────── conditional verdict (two branches) ───────── */
+  .verdict.conditional {
+    font-size: 2rem;             /* smaller than the giant 4.5rem single-word verdict */
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin: 0.4rem 0 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .cond-line {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.55rem;
+  }
+  .cond-action {
+    font-style: italic;
+    font-weight: 400;
+    min-width: 3.2rem;
+    text-align: right;
+  }
+  .cond-action.jam  { color: var(--jam); }
+  .cond-action.fold { color: var(--fold); }
+  .cond-cond {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    font-style: normal;
+    color: var(--ink-mute);
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ───────── auto-return countdown indicator (smart-skip results only) ───────── */
+  .auto-return-indicator {
+    display: none;
+    text-align: center;
+    margin-top: 0.85rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+  .auto-return-indicator .cancel-hint {
+    color: var(--ink-dim);
+  }
+
   /* ───────── action buttons ───────── */
   .actions {
     display: flex;
@@ -853,13 +901,13 @@
     <h1 class="prompt"><em>Suited</em> or off?</h1>
     <p class="sub" id="hand3-sub">—</p>
     <div class="suit-choice">
-      <button class="suit-btn" data-suit="s">
-        <span class="suit-label">Suited</span>
-        <span class="suit-cards"><span class="card heart">♥</span><span class="card heart">♥</span></span>
-      </button>
       <button class="suit-btn" data-suit="o">
         <span class="suit-label">Offsuit</span>
         <span class="suit-cards"><span class="card club">♣</span><span class="card spade">♠</span></span>
+      </button>
+      <button class="suit-btn" data-suit="s">
+        <span class="suit-label">Suited</span>
+        <span class="suit-cards"><span class="card heart">♥</span><span class="card heart">♥</span></span>
       </button>
     </div>
   </section>
@@ -885,6 +933,7 @@
       <span>Reroll</span>
     </button>
     <button class="chart-toggle" id="chart-toggle">View full chart</button>
+    <div class="auto-return-indicator" id="auto-return-indicator"></div>
     <div class="chart-view" id="chart-view">
       <div class="chart-title" id="chart-title">Strategy for this state</div>
       <div class="hand-grid" id="chart-grid"></div>
@@ -1201,6 +1250,98 @@ function checkAcceleration() {
   return allJam ? 'JAM' : (allFold ? 'FOLD' : null);
 }
 
+// ─────────────────────────────────────────────────────────────
+//  CONDITIONAL VERDICT — "Jam if X, fold otherwise"
+// ─────────────────────────────────────────────────────────────
+//  Fires when exactly ONE remaining unknown determines the answer.
+//  Returns null if the conditional pattern doesn't apply.
+//  Otherwise returns:
+//    { kind: 'suit',   sJam: bool, oJam: bool }
+//    { kind: 'action', who: 'SB', jamJam: bool, foldJam: bool }
+//  Where the bools indicate "is this branch a JAM (true) or FOLD (false)".
+
+// Returns 'JAM', 'FOLD', or null for a list of (cell × state) combos.
+function uniformVerdict(combos) {
+  let allJam = true, allFold = true;
+  for (const [hIdx, sIdx] of combos) {
+    const p = pJam(sIdx, hIdx);
+    if (p < 0.95) allJam = false;
+    if (p > 0.05) allFold = false;
+    if (!allJam && !allFold) return null;
+  }
+  return allJam ? 'JAM' : (allFold ? 'FOLD' : null);
+}
+
+function checkConditional() {
+  if (!game.smartSkip) return null;
+  if (!game.position) return null;
+
+  // Suit-conditional: handHigh + handLow set, non-pair, no suit chosen
+  if (game.handHigh !== null && game.handLow !== null &&
+      game.handHigh !== game.handLow && game.handSuit === null) {
+    const stateKeys = consistentStateKeys();
+    if (stateKeys.length === 0) return null;
+    const stateIdxs = stateKeys.map(k => STATE_INDEX[k]);
+
+    // Build combos for suit='s' (cell row=high, col=low)
+    const sCombos = stateIdxs.map(s => [handIndex(game.handHigh, game.handLow), s]);
+    // For suit='o' (cell row=low, col=high)
+    const oCombos = stateIdxs.map(s => [handIndex(game.handLow, game.handHigh), s]);
+
+    const sV = uniformVerdict(sCombos);
+    const oV = uniformVerdict(oCombos);
+    if (sV && oV && sV !== oV) {
+      return { kind: 'suit', sJam: sV === 'JAM', oJam: oV === 'JAM' };
+    }
+    return null;
+  }
+
+  // Action-conditional: hand fully specified, next villain's action determines everything.
+  const priors = priorPlayers(game.position);
+  if (priors.length === 0) return null;
+  if (game.handHigh === null || game.handLow === null) return null;
+  if (game.handHigh !== game.handLow && game.handSuit === null) return null;
+  if (game.history.length >= priors.length) return null;
+  // Allow even when no priors entered yet — the FIRST villain's action could determine everything
+
+  // The next villain to act
+  const nextWho = priors[game.history.length];
+  // After deciding next action, there may still be more priors after that.
+  // So we need: for next='J', enumerate all completions; for next='F', same.
+  // Each set must be uniformly JAM or FOLD.
+  const rc = handRowCol();
+  if (!rc) return null;
+  const hIdx = handIndex(rc[0], rc[1]);
+
+  function buildCombosForNext(nextAction) {
+    const fixed = game.history.join('') + nextAction;
+    const remaining = priors.length - fixed.length;
+    const combos = [];
+    for (let mask = 0; mask < (1 << remaining); mask++) {
+      let suffix = '';
+      for (let i = 0; i < remaining; i++) suffix += (mask & (1 << i)) ? 'J' : 'F';
+      const fullHistory = fixed + suffix;
+      // Skip walk path for BB
+      if (game.position === 'BB' && fullHistory.split('').every(c => c === 'F')) continue;
+      const key = game.position + '|' + implicitFoldPrefix() + fullHistory;
+      const sIdx = STATE_INDEX[key];
+      if (sIdx !== undefined) combos.push([hIdx, sIdx]);
+    }
+    return combos;
+  }
+
+  const jCombos = buildCombosForNext('J');
+  const fCombos = buildCombosForNext('F');
+  if (jCombos.length === 0 || fCombos.length === 0) return null;
+
+  const jV = uniformVerdict(jCombos);
+  const fV = uniformVerdict(fCombos);
+  if (jV && fV && jV !== fV) {
+    return { kind: 'action', who: nextWho, jamJam: jV === 'JAM', foldJam: fV === 'JAM' };
+  }
+  return null;
+}
+
 // derived: get (row, col) for the strategy lookup
 function handRowCol() {
   // Convention from the original grid: row = high (smaller index), col = low (larger index)
@@ -1370,21 +1511,35 @@ function buildActionScreen() {
         // truncate history at this index, set new value
         game.history = game.history.slice(0, i);
         game.history.push(b.dataset.action);
-        // rebuild (next row will appear if needed)
-        buildActionScreen();
-        // if we have all needed actions, advance to the result
+
+        // If we have all needed actions, advance to the result with a brief
+        // delay so the user sees their last selection register.
         if (game.history.length === players.length) {
-          // small delay so user sees their selection
+          buildActionScreen();
           setTimeout(computeAndShowResult, 220);
           return;
         }
-        // Mid-action acceleration: if remaining villains' actions don't change
-        // the answer, skip them and go straight to the verdict.
+
+        // Mid-action acceleration: check BEFORE rebuilding so the next row
+        // never flashes on screen. If accelerating, transition immediately.
         const accel = checkAcceleration();
         if (accel) {
           game.skippedFrom = 'action';
-          setTimeout(() => showAcceleratedResult(accel), 220);
+          showAcceleratedResult(accel);
+          return;
         }
+
+        // Conditional verdict: if exactly one more action determines everything
+        // and the answer differs between J and F, show both branches.
+        const cond = checkConditional();
+        if (cond) {
+          game.skippedFrom = 'action';
+          showConditionalResult(cond);
+          return;
+        }
+
+        // Otherwise, rebuild to reveal the next prompt row.
+        buildActionScreen();
       });
     });
 
@@ -1428,6 +1583,9 @@ function goToHand2() {
     game.handSuit = null;
     const accel = checkAcceleration();
     if (accel) { game.skippedFrom = 'hand2'; showAcceleratedResult(accel); return; }
+    // Or if it's a clean suit-conditional (jam if suited, fold otherwise)
+    const cond = checkConditional();
+    if (cond) { game.skippedFrom = 'hand2'; showConditionalResult(cond); return; }
     goToHand3();
   }, highlightHigh: game.handHigh });
   // dynamic subtext
@@ -1463,6 +1621,14 @@ function goToActionOrResult(fromScreen) {
   if (accel) {
     game.skippedFrom = fromScreen || 'hand3';
     showAcceleratedResult(accel);
+    return;
+  }
+  // Conditional: if exactly the next villain's action determines everything,
+  // show "jam if X, fold otherwise" and skip the action screen.
+  const cond = checkConditional();
+  if (cond) {
+    game.skippedFrom = fromScreen || 'hand3';
+    showConditionalResult(cond);
     return;
   }
   buildActionScreen();
@@ -1655,10 +1821,99 @@ function showAcceleratedResult(verdictStr) {
   document.getElementById('chart-view').classList.remove('show');
 
   showScreen('result');
+  startAutoReturn();
+}
+
+function showConditionalResult(cond) {
+  // cond is { kind: 'suit'|'action', ... } — see checkConditional()
+  game.accelerated = true;
+  game.prob = null;
+  game.rolled = null;
+
+  // Top label: zap icon + "if..."
+  const probLine = document.querySelector('.prob:first-child');
+  probLine.style.visibility = '';
+  probLine.classList.add('accel-line');
+  probLine.innerHTML =
+    '<svg class="zap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>' +
+    '</svg><span class="accel-label">if…</span>';
+
+  // Replace the big verdict with two stacked branch lines
+  const verdict = document.getElementById('verdict');
+  verdict.className = 'verdict conditional';
+
+  let line1, line2;
+  if (cond.kind === 'suit') {
+    // sJam=true means suit='s' is JAM; sJam=false means suit='s' is FOLD
+    const sAction = cond.sJam ? 'jam' : 'fold';
+    const oAction = cond.oJam ? 'jam' : 'fold';
+    line1 = { action: sAction, condition: 'if suited' };
+    line2 = { action: oAction, condition: 'if offsuit' };
+  } else {
+    // action-conditional: cond.who is the next villain, jamJam/foldJam are the two outcomes
+    const jamAction  = cond.jamJam  ? 'jam' : 'fold';
+    const foldAction = cond.foldJam ? 'jam' : 'fold';
+    // Reuse the "jam"/"call" wording: if previous priors include any J, this villain "calls"
+    const verb = game.history.includes('J') ? 'calls' : 'jams';
+    line1 = { action: jamAction,  condition: 'if ' + cond.who + ' ' + verb };
+    line2 = { action: foldAction, condition: 'if ' + cond.who + ' folds' };
+  }
+
+  verdict.innerHTML =
+    '<div class="cond-line">' +
+      '<span class="cond-action ' + line1.action + '">' + line1.action + '</span>' +
+      '<span class="cond-cond">' + line1.condition + '</span>' +
+    '</div>' +
+    '<div class="cond-line">' +
+      '<span class="cond-action ' + line2.action + '">' + line2.action + '</span>' +
+      '<span class="cond-cond">' + line2.condition + '</span>' +
+    '</div>';
+
+  // Detail text
+  document.getElementById('prob-detail').textContent = 'depends on one factor';
+
+  // Build hand label, same as accelerated but accounting for unknown suit
+  let handStr;
+  if (game.handHigh === game.handLow) {
+    handStr = RANKS[game.handHigh] + RANKS[game.handHigh];
+  } else if (game.handSuit === null) {
+    handStr = RANKS[game.handHigh] + RANKS[game.handLow];
+  } else {
+    handStr = handLabel(...handRowCol());
+  }
+
+  // Build action context (same logic as accelerated)
+  const priors = priorPlayers(game.position);
+  const entered = game.history;
+  let actionStr;
+  if (priors.length === 0) {
+    actionStr = 'first to act';
+  } else if (entered.length === 0) {
+    actionStr = '';
+  } else {
+    actionStr = entered
+      .map((a, i) => priors[i] + (a === 'J' ? (entered.slice(0,i).includes('J') ? ' calls' : ' jams') : ' folds'))
+      .join(' · ');
+  }
+
+  const ctxParts = [game.position];
+  if (actionStr) ctxParts.push(actionStr);
+  ctxParts.push('<span class="hand">' + handStr + '</span>');
+  document.getElementById('context-line').innerHTML = ctxParts.join(' · ');
+
+  // Hide reroll + chart
+  document.getElementById('reroll').style.display       = 'none';
+  document.getElementById('chart-toggle').style.display = 'none';
+  document.getElementById('chart-view').classList.remove('show');
+
+  showScreen('result');
+  startAutoReturn();
 }
 
 function showWalkResult() {
   game.accelerated = false;
+  cancelAutoReturn();
 
   // Hide elements that don't apply to a walk; also reset accel-line if previously set
   const probLine = document.querySelector('.prob:first-child');
@@ -1694,6 +1949,7 @@ function showWalkResult() {
 function computeAndShowResult() {
   game.accelerated = false;
   game.skippedFrom = null;
+  cancelAutoReturn();
 
   // Walk detection: hero=BB with all-folds history, regardless of player count.
   if (isWalk()) {
@@ -1812,6 +2068,7 @@ document.getElementById('back-btn').addEventListener('click', () => {
 
 function restart() {
   // Soft reset — preserves playerCount setting
+  cancelAutoReturn();
   game.position = null; game.history = [];
   game.handHigh = null; game.handLow = null; game.handSuit = null;
   game.accelerated = false; game.skippedFrom = null;
@@ -1819,6 +2076,50 @@ function restart() {
   syncPlayerCount();   // re-render pos grid greyed-out state for the kept count
   showScreen('position');
 }
+
+// ─────────────────────────────────────────────────────────────
+//  AUTO-RETURN — only for smart-skip verdicts (accelerated / conditional)
+// ─────────────────────────────────────────────────────────────
+let autoReturnTimer = null;
+let autoReturnCountdown = null;
+
+function startAutoReturn() {
+  cancelAutoReturn();
+  const total = 3;  // total seconds
+  let remaining = total;
+  const indicator = document.getElementById('auto-return-indicator');
+  if (!indicator) return;
+
+  const render = () => {
+    indicator.innerHTML = 'resetting in ' + remaining + 's · <span class="cancel-hint">tap to cancel</span>';
+  };
+  render();
+  indicator.style.display = 'block';
+
+  autoReturnCountdown = setInterval(() => {
+    remaining--;
+    if (remaining > 0) render();
+  }, 1000);
+
+  autoReturnTimer = setTimeout(() => {
+    cancelAutoReturn();
+    restart();
+  }, total * 1000);
+}
+
+function cancelAutoReturn() {
+  if (autoReturnTimer)     { clearTimeout(autoReturnTimer);   autoReturnTimer = null; }
+  if (autoReturnCountdown) { clearInterval(autoReturnCountdown); autoReturnCountdown = null; }
+  const indicator = document.getElementById('auto-return-indicator');
+  if (indicator) indicator.style.display = 'none';
+}
+
+// Any user interaction cancels the auto-return. Use capture phase so we run
+// before button click handlers — buttons still get their events normally,
+// they just also cancel the timer.
+document.addEventListener('pointerdown', () => {
+  if (autoReturnTimer) cancelAutoReturn();
+}, true);
 
 function fullReset() {
   // Hard reset — also clears playerCount and smartSkip (logo tap = fresh start)
