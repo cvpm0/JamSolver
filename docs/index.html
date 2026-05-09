@@ -385,38 +385,42 @@
   .zap-icon { width: 14px; height: 14px; flex-shrink: 0; }
   .accel-label { color: var(--accent); }
 
-  /* ───────── conditional verdict (two branches) ───────── */
+  /* ───────── conditional verdict (two columns: fold left, jam right) ───────── */
   .verdict.conditional {
-    font-size: 2rem;             /* smaller than the giant 4.5rem single-word verdict */
-    line-height: 1.15;
+    font-size: 1rem;
+    line-height: 1.2;
     letter-spacing: -0.02em;
-    margin: 0.4rem 0 0.5rem;
+    margin: 0.5rem 0 0.4rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .cond-col {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.6rem 0.4rem 0.3rem;
+    border-radius: 12px;
   }
-  .cond-line {
-    display: flex;
-    justify-content: center;
-    align-items: baseline;
-    gap: 0.55rem;
-  }
-  .cond-action {
-    font-style: italic;
-    font-weight: 400;
-    min-width: 3.2rem;
-    text-align: right;
-  }
-  .cond-action.jam  { color: var(--jam); }
-  .cond-action.fold { color: var(--fold); }
-  .cond-cond {
+  .cond-col .cond-cond {
     font-family: var(--mono);
-    font-size: 0.85rem;
+    font-size: 0.72rem;
     font-style: normal;
     color: var(--ink-mute);
     text-transform: lowercase;
     letter-spacing: 0.04em;
+    text-align: center;
   }
+  .cond-col .cond-action {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 2.6rem;
+    line-height: 1;
+  }
+  .cond-action.jam  { color: var(--jam); }
+  .cond-action.fold { color: var(--fold); }
 
   /* ───────── auto-return countdown indicator (smart-skip results only) ───────── */
   .auto-return-indicator {
@@ -1770,6 +1774,7 @@ function showAcceleratedResult(verdictStr) {
   verdict.className = 'verdict ' + (verdictStr === 'JAM' ? 'jam' : 'fold');
 
   // Detail text
+  document.getElementById('prob-detail').style.display = '';
   document.getElementById('prob-detail').textContent =
     (verdictStr === 'JAM') ? 'pure jam · all paths' : 'pure fold · all paths';
 
@@ -1830,50 +1835,59 @@ function showConditionalResult(cond) {
   game.prob = null;
   game.rolled = null;
 
-  // Top label: zap icon + "if..."
+  // Top label: zap icon + CONDITIONAL
   const probLine = document.querySelector('.prob:first-child');
   probLine.style.visibility = '';
   probLine.classList.add('accel-line');
   probLine.innerHTML =
     '<svg class="zap-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>' +
-    '</svg><span class="accel-label">if…</span>';
+    '</svg><span class="accel-label">conditional</span>';
 
-  // Replace the big verdict with two stacked branch lines
+  // Build the two branches. Each branch has a condition and an action.
+  // Layout convention: fold branch on LEFT, jam branch on RIGHT
+  // (mirrors the action-screen fold/jam button arrangement).
   const verdict = document.getElementById('verdict');
   verdict.className = 'verdict conditional';
 
-  let line1, line2;
+  // Determine which branch is jam vs fold for both kinds
+  let jamCondition, foldCondition;
   if (cond.kind === 'suit') {
-    // sJam=true means suit='s' is JAM; sJam=false means suit='s' is FOLD
-    const sAction = cond.sJam ? 'jam' : 'fold';
-    const oAction = cond.oJam ? 'jam' : 'fold';
-    line1 = { action: sAction, condition: 'if suited' };
-    line2 = { action: oAction, condition: 'if offsuit' };
+    // sJam = whether suited is jam; oJam = whether offsuit is jam
+    if (cond.sJam) {
+      jamCondition  = 'if suited';
+      foldCondition = 'if offsuit';
+    } else {
+      jamCondition  = 'if offsuit';
+      foldCondition = 'if suited';
+    }
   } else {
-    // action-conditional: cond.who is the next villain, jamJam/foldJam are the two outcomes
-    const jamAction  = cond.jamJam  ? 'jam' : 'fold';
-    const foldAction = cond.foldJam ? 'jam' : 'fold';
-    // Reuse the "jam"/"call" wording: if previous priors include any J, this villain "calls"
+    // jamJam = whether next villain jamming → hero jams; foldJam = whether next villain folding → hero jams
     const verb = game.history.includes('J') ? 'calls' : 'jams';
-    line1 = { action: jamAction,  condition: 'if ' + cond.who + ' ' + verb };
-    line2 = { action: foldAction, condition: 'if ' + cond.who + ' folds' };
+    if (cond.jamJam) {
+      jamCondition  = 'if ' + cond.who + ' ' + verb;
+      foldCondition = 'if ' + cond.who + ' folds';
+    } else {
+      jamCondition  = 'if ' + cond.who + ' folds';
+      foldCondition = 'if ' + cond.who + ' ' + verb;
+    }
   }
 
   verdict.innerHTML =
-    '<div class="cond-line">' +
-      '<span class="cond-action ' + line1.action + '">' + line1.action + '</span>' +
-      '<span class="cond-cond">' + line1.condition + '</span>' +
+    '<div class="cond-col cond-col-fold">' +
+      '<span class="cond-cond">' + foldCondition + '</span>' +
+      '<span class="cond-action fold">fold</span>' +
     '</div>' +
-    '<div class="cond-line">' +
-      '<span class="cond-action ' + line2.action + '">' + line2.action + '</span>' +
-      '<span class="cond-cond">' + line2.condition + '</span>' +
+    '<div class="cond-col cond-col-jam">' +
+      '<span class="cond-cond">' + jamCondition + '</span>' +
+      '<span class="cond-action jam">jam</span>' +
     '</div>';
 
-  // Detail text
-  document.getElementById('prob-detail').textContent = 'depends on one factor';
+  // Clear prob-detail (no "depends on one factor")
+  document.getElementById('prob-detail').textContent = '';
+  document.getElementById('prob-detail').style.display = 'none';
 
-  // Build hand label, same as accelerated but accounting for unknown suit
+  // Build hand label, accounting for unknown suit
   let handStr;
   if (game.handHigh === game.handLow) {
     handStr = RANKS[game.handHigh] + RANKS[game.handHigh];
@@ -1920,6 +1934,7 @@ function showWalkResult() {
   probLine.classList.remove('accel-line');
   probLine.innerHTML = '<span class="num" id="prob-pct">—</span> jam frequency';
   document.getElementById('prob-pct').textContent       = '—';
+  document.getElementById('prob-detail').style.display = '';
   document.getElementById('prob-detail').textContent    = 'no decision';
   probLine.style.visibility = 'hidden';
 
@@ -2018,6 +2033,7 @@ function rollDice() {
   else if (p <= 0.05) detail = 'pure fold';
   else if (p > 0.5)   detail = 'mostly jam';
   else                detail = 'mostly fold';
+  document.getElementById('prob-detail').style.display = '';
   document.getElementById('prob-detail').textContent = detail;
 }
 
@@ -2033,13 +2049,22 @@ document.getElementById('back-btn').addEventListener('click', () => {
       //    Smart Skip fired. game.skippedFrom records this.
       //  - If normal result and there were prior players → action screen
       //  - Else → hand picker (suit if non-pair, low-rank if pair)
+      //
+      //  When the destination is the action screen, pop the last history
+      //  entry so the user is prompted to re-pick that decision (rather
+      //  than seeing all priors locked-in from the previous attempt).
       if (game.accelerated && game.skippedFrom) {
         if      (game.skippedFrom === 'hand1')  showScreen('hand1');
         else if (game.skippedFrom === 'hand2')  goToHand2();
         else if (game.skippedFrom === 'hand3')  goToHand3();
-        else if (game.skippedFrom === 'action') { buildActionScreen(); showScreen('action'); }
+        else if (game.skippedFrom === 'action') {
+          if (game.history.length > 0) game.history.pop();
+          buildActionScreen();
+          showScreen('action');
+        }
         else                                    showScreen('position'); // fallback
       } else if (priorPlayers(game.position).length > 0) {
+        if (game.history.length > 0) game.history.pop();
         buildActionScreen();
         showScreen('action');
       } else if (game.handHigh === game.handLow) {
@@ -2085,7 +2110,7 @@ let autoReturnCountdown = null;
 
 function startAutoReturn() {
   cancelAutoReturn();
-  const total = 3;  // total seconds
+  const total = 5;  // total seconds
   let remaining = total;
   const indicator = document.getElementById('auto-return-indicator');
   if (!indicator) return;
